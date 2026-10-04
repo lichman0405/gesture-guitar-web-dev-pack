@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gesture Guitar Performance",
+  "type": "object",
+  "required": [
+    "version",
+    "sessionId",
+    "startedAt",
+    "settings",
+    "events"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "startedAt": {
+      "type": "string"
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "handedness",
+        "mode",
+        "bpm",
+        "timeSignature",
+        "instrumentPreset"
+      ],
+      "properties": {
+        "handedness": {
+          "enum": [
+            "right",
+            "left"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "free",
+            "guided",
+            "song"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bpm": {
+          "type": "number"
+        },
+        "timeSignature": {
+          "enum": [
+            "4/4",
+            "3/4",
+            "6/8"
+          ]
+        },
+        "instrumentPreset": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "t",
+          "type"
+        ],
+        "properties": {
+          "t": {
+            "type": "number",
+            "minimum": 0
+          },
+          "type": {
+            "enum": [
+              "chord",
+              "strum",
+              "mute",
+              "control"
+            ]
+          },
+          "chord": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "down",
+              "up"
+            ]
+          },
+          "velocity": {
+            "type": "number"
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "articulation": {
+            "enum": [
+              "normal",
+              "muted"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "vision",
+              "keyboard",
+              "test"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "songPlan": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "evaluation": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": true
+}
