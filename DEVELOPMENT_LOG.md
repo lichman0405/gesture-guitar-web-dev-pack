@@ -80,3 +80,46 @@ Decisions:
   - 10-minute continuous soak (acceptance N) not run to wall-clock completion in automation; the E2E stability specs exercise the same record/exit/re-enter code paths repeatedly without page errors.
   - Camera/microphone behavior verified with Playwright fake media devices and unit-level mocks; real-device latency and lighting robustness require physical hardware.
   - jsdom lacks OfflineAudioContext, so the guitar-wav export failure-isolation path is unit-tested via that absence; the success path is covered by Chromium E2E (export artifact visible on results screen).
+
+## Phase 11 — Real-environment verification (done)
+
+User challenge: "test the real situation, not just the demo." Previous gates used
+mocks (FakeAudioContext) and unit-level fakes; this phase verified the real stack
+in a real browser (headless Chromium, fake media device only for the camera IMAGE
+source — everything else real).
+
+- Real-verification E2E suite (e2e/real-verification.spec.ts), all passing:
+  - Audio: AnalyserNode tapped onto the real master bus measures clear non-silent
+    signal after a strum; AudioContext state "running".
+  - Export: real OfflineAudioContext renders guitar-wav + mix-wav; both decoded
+    back via decodeAudioData, duration and RMS asserted; performance.json parsed
+    with the performed events. (In jsdom this same path falls into the isolated-
+    failure branch — success here is the real-browser signal.)
+  - Vision: real 7.8 MB MediaPipe model + WASM + module worker + camera loop
+    reach "running", real inference measured (fps > 0, avgInferenceMs real),
+    calibration fails gracefully with a hands-related reason on the hand-free
+    fake camera. Production preview (vite preview, bundled worker) verified the
+    same chain end to end.
+- CRITICAL bugs found only by real testing, and fixed:
+  1. Vision stack never started anywhere: tasks-vision's FilesetResolver falls
+     back to dynamic import() of the UMD WASM loader inside ES module workers
+     (what Vite serves) → "ModuleFactory not set." Fixed in
+     scripts/copy-mediapipe-wasm.mjs: append `self.ModuleFactory = ModuleFactory`
+     to the copied loaders at postinstall.
+  2. Next strict-mode landmine: Emscripten's block-scoped `function custom_dbg`
+     is a ReferenceError in ES modules. Same script now predefines a global
+     custom_dbg so the loader's typeof check takes the safe path.
+  3. CalibrateScreen showed "Camera could not be started" for EVERY failure
+     (model/worker/permission indistinguishable). VisionSession now retains the
+     VisionClientError (visionError getter); the screen maps kind → specific
+     actionable message (denied / no-device / worker-error / timeout /
+     unsupported).
+- Also added scripts/diag-vision.mjs (worker-message + console capture against
+  any base URL) — used to root-cause the above.
+- Gates after fixes: tsc ✓, lint ✓, 234 unit tests ✓, build ✓, 9/9 E2E ✓.
+- Headless CI note: SwiftShader software-GL inference averages 130–590 ms/frame;
+  on real GPU hardware this is tens of ms and the adaptive tier controller
+  downgrades resolution to keep the pump responsive.
+- Remaining genuinely hardware-bound item: recognition accuracy on real hands in
+  real lighting needs a physical camera + hands; everything up to the landmark
+  boundary is now verified running for real.

@@ -61,6 +61,7 @@ export class VisionSession {
   private client: VisionClient | null = null;
   private latestFrame: VisionFrame | null = null;
   private state: VisionSessionState = "idle";
+  private lastError: VisionClientError | null = null;
 
   constructor(options: VisionSessionOptions) {
     this.options = options;
@@ -81,6 +82,11 @@ export class VisionSession {
 
   get currentState(): VisionSessionState {
     return this.state;
+  }
+
+  /** The failure that put the session into "error" state, when known. */
+  get visionError(): VisionClientError | null {
+    return this.lastError;
   }
 
   get isRunning(): boolean {
@@ -104,6 +110,7 @@ export class VisionSession {
   /** Start camera + worker + pipeline. videoEl displays the mirrored feed. */
   async start(videoEl: HTMLVideoElement): Promise<void> {
     if (this.client) return;
+    this.lastError = null;
     this.setState("starting");
     const client = new VisionClient({
       adaptive: this.options.adaptive ?? true,
@@ -112,6 +119,7 @@ export class VisionSession {
         this.pipeline.handleFrame(frame);
       },
       onError: (error) => {
+        this.lastError = error;
         this.options.onError?.(error);
         if (this.state !== "running") this.setState("error");
       },
@@ -119,8 +127,12 @@ export class VisionSession {
     });
     try {
       await client.start(videoEl);
-    } catch {
+    } catch (err) {
       this.client = null;
+      this.lastError ??= {
+        kind: "unsupported",
+        message: err instanceof Error ? err.message : String(err),
+      };
       this.setState("error");
       return;
     }

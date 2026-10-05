@@ -113,6 +113,20 @@ export function App() {
     };
   }, []);
 
+  // Dev/test introspection hook: lets E2E verify the REAL audio graph,
+  // vision session stats and export artifacts from the page context.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as Record<string, unknown>;
+    w.__ggw = {
+      controller: () => controllerRef.current,
+      vision: () => visionRef.current,
+    };
+    return () => {
+      delete w.__ggw;
+    };
+  }, []);
+
   if (fatalError) {
     return (
       <main className="screen error-screen">

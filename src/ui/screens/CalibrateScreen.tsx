@@ -14,6 +14,24 @@ interface CalibrateScreenProps {
 
 type Phase = "starting" | "collecting" | "done" | "failed" | "camera-error";
 
+/** User-actionable message for a vision startup failure. */
+function visionErrorMessage(session: VisionSession): string {
+  const err = session.visionError;
+  switch (err?.kind) {
+    case "denied":
+      return "Camera permission was denied. Allow camera access in your browser settings and try again.";
+    case "no-device":
+      return "No camera was found. Connect a camera and try again.";
+    case "worker-error":
+    case "timeout":
+      return "The hand-tracking engine failed to start. Reload the page and try again.";
+    case "unsupported":
+      return "This browser does not support the camera features required. Try a recent Chrome or Edge.";
+    default:
+      return "Camera could not be started. Check permission and that no other app is using it.";
+  }
+}
+
 /**
  * 2–3 second calibration flow (UX_FLOW §4): show both hands, settle,
  * capture scale/noise/corridor, then enter Ready. Failures get actionable
@@ -47,9 +65,7 @@ export function CalibrateScreen({
       void session.start(el).then(() => {
         if (session.currentState !== "running") {
           setPhase("camera-error");
-          setVisionError(
-            "Camera could not be started. Check permission and that no other app is using it.",
-          );
+          setVisionError(visionErrorMessage(session));
           return;
         }
         beginCalibration();
