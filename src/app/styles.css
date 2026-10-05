@@ -294,6 +294,74 @@ kbd {
   color: #9fb0c0;
 }
 
+/* Display modes (normal / performance / debug) */
+.perform {
+  position: relative;
+  flex-wrap: wrap;
+}
+
+.display-mode-switch {
+  position: absolute;
+  top: -0.5rem;
+  right: 0;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.display-mode-switch button {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.7rem;
+  color: #7d8fa1;
+  background: var(--panel);
+}
+
+.display-mode-switch button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Performance mode: minimal layout, oversized chord readout. */
+.perform.mode-performance {
+  flex-direction: column;
+  align-items: center;
+}
+
+.perform.mode-performance .chord-value.performance-big {
+  font-size: 13rem;
+}
+
+.perform.mode-performance .perform-main {
+  padding-top: 6vh;
+}
+
+.perform.mode-performance .perform-side {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+}
+
+.perform.mode-performance .exit-button {
+  margin-top: 0;
+}
+
+/* Debug mode: debug panel forced open. */
+.debug-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+
+.debug-panel dt {
+  color: #7d8fa1;
+}
+
+.debug-panel dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .error-screen {
   text-align: center;
   padding-top: 15vh;

@@ -54,15 +54,16 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
   const ui = useAppStore(controller.store);
   const [guitarMeter, setGuitarMeter] = useState<LevelMeter | null>(null);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [displayMode, setDisplayMode] = useState<"normal" | "performance" | "debug">("normal");
   const [debug, setDebug] = useState<{
     fps: number;
     inferenceMs: number;
     stats: PipelineDebugStats;
   } | null>(null);
 
-  // Debug stats poll (4 Hz) — only when a vision session exists.
+  // Debug stats poll (4 Hz) — only in debug mode with a vision session.
   useEffect(() => {
-    if (!visionSession) return;
+    if (!visionSession || displayMode !== "debug") return;
     const id = setInterval(() => {
       const { fps, avgInferenceMs } = visionSession.getStats();
       setDebug({
@@ -72,7 +73,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
       });
     }, 250);
     return () => clearInterval(id);
-  }, [visionSession]);
+  }, [visionSession, displayMode]);
 
   // Guitar level meter (created once audio is running).
   useEffect(() => {
@@ -99,11 +100,27 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
   const strum = ui.lastStrum;
 
   return (
-    <main className="screen perform" data-testid="perform-screen">
+    <main className={`screen perform mode-${displayMode}`} data-testid="perform-screen">
+      <div className="display-mode-switch" role="group" aria-label="Display mode">
+        {(["normal", "performance", "debug"] as const).map((mode) => (
+          <button
+            key={mode}
+            className={displayMode === mode ? "active" : ""}
+            onClick={() => setDisplayMode(mode)}
+            data-testid={`display-mode-${mode}`}
+          >
+            {mode[0].toUpperCase() + mode.slice(1)}
+          </button>
+        ))}
+      </div>
+
       <div className="perform-main">
         <section className="chord-display" aria-live="polite">
           <div className="chord-label">Current chord</div>
-          <div className="chord-value" data-testid="current-chord">
+          <div
+            className={`chord-value${displayMode === "performance" ? " performance-big" : ""}`}
+            data-testid="current-chord"
+          >
             {ui.chord ?? "—"}
           </div>
           {ui.muteActive && <div className="mute-badge">MUTED</div>}
@@ -171,7 +188,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
       </div>
 
       <div className="perform-side">
-        {visionSession && (
+        {visionSession && displayMode !== "performance" && (
           <section className="camera-panel" aria-label="Camera preview">
             <CameraView
               getFrame={() => visionSession.frame}
@@ -179,9 +196,9 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
               mirrored
               showOverlay
             />
-            <details className="debug-panel">
+            <details className="debug-panel" open={displayMode === "debug"}>
               <summary>Debug</summary>
-              {debug && (
+              {debug ? (
                 <dl>
                   <dt>FPS</dt>
                   <dd data-testid="debug-fps">{debug.fps}</dd>
@@ -206,6 +223,8 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                       : "—"}
                   </dd>
                 </dl>
+              ) : (
+                <p className="hint">Debug stats appear here in Debug mode.</p>
               )}
             </details>
             {onRecalibrate && (
@@ -216,7 +235,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
           </section>
         )}
 
-        <MeterBar meter={guitarMeter} label="Guitar" />
+        {displayMode !== "performance" && <MeterBar meter={guitarMeter} label="Guitar" />}
 
         <div className="record-row">
           {ui.recording ? (
@@ -235,31 +254,35 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
           )}
         </div>
 
-        <div className="transport-row">
-          {ui.metronomeRunning ? (
-            <button onClick={() => controller.stopMetronome()}>Stop metronome</button>
-          ) : (
-            <button onClick={() => controller.startMetronome()} data-testid="metronome-button">
-              Start metronome
-            </button>
-          )}
-        </div>
+        {displayMode !== "performance" && (
+          <>
+            <div className="transport-row">
+              {ui.metronomeRunning ? (
+                <button onClick={() => controller.stopMetronome()}>Stop metronome</button>
+              ) : (
+                <button onClick={() => controller.startMetronome()} data-testid="metronome-button">
+                  Start metronome
+                </button>
+              )}
+            </div>
 
-        <details className="keyboard-hints">
-          <summary>Keyboard controls</summary>
-          <table>
-            <tbody>
-              {KEYBOARD_HINTS.map(([key, desc]) => (
-                <tr key={key}>
-                  <td>
-                    <kbd>{key}</kbd>
-                  </td>
-                  <td>{desc}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
+            <details className="keyboard-hints">
+              <summary>Keyboard controls</summary>
+              <table>
+                <tbody>
+                  {KEYBOARD_HINTS.map(([key, desc]) => (
+                    <tr key={key}>
+                      <td>
+                        <kbd>{key}</kbd>
+                      </td>
+                      <td>{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </>
+        )}
 
         <button className="exit-button" onClick={onExit}>
           Exit session
