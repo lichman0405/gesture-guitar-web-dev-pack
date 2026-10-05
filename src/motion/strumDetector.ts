@@ -17,7 +17,10 @@ type Direction = "down" | "up";
  * Tuning:
  * - y smoother alpha = 0.6 — slightly heavier than the velocity smoother
  *   because raw y comes from noisy landmark detection.
- * - VelocityEstimator: window 0.06 s, smoothing alpha 0.5.
+ * - VelocityEstimator: window 0.12 s, smoothing alpha 0.5. The window must
+ *   span several frames even on slow cameras: at 60 ms it collapses to 1–2
+ *   samples once the frame rate drops below ~16 fps, which kills the slope
+ *   estimate exactly when the pipeline is struggling.
  * - Tracking timeout = 0.8 s.
  *
  * Coordinate system: image-normalized, y increases downward.
@@ -39,6 +42,7 @@ export class StrumDetector {
   private peakAbsV = 0;
   private direction: Direction | null = null;
   private lastTrackedY = 0;
+  private previousRawY: number | null = null;
 
   // Cooldown
   private cooldownEndT = 0;
@@ -48,7 +52,7 @@ export class StrumDetector {
     this.options = options ?? {};
     this.thresholds = { ...DEFAULT_STRUM_THRESHOLDS, ...this.options.thresholds };
     this.ySmoother = new ExponentialSmoother(0.6);
-    this.velocityEstimator = new VelocityEstimator({ windowSeconds: 0.06, smoothingAlpha: 0.5 });
+    this.velocityEstimator = new VelocityEstimator({ windowSeconds: 0.12, smoothingAlpha: 0.5 });
   }
 
   /** Feed a new palm-center y (null = hand lost). */
@@ -65,6 +69,10 @@ export class StrumDetector {
     const smoothedY = this.ySmoother.update(y);
     this.velocityEstimator.addSample(t, smoothedY);
     const rawV = this.velocityEstimator.velocity;
+
+    // Captured before overwriting: the trigger seed needs the PREVIOUS frame.
+    const prevRawY = this.previousRawY;
+    this.previousRawY = y;
 
     // Normalize by handScale, then apply sensitivity.
     const normalizedV = (rawV / this.calibration.handScale) * this.calibration.sensitivity;
@@ -90,11 +98,18 @@ export class StrumDetector {
         this.accumulatedDisplacement = 0;
         this.peakAbsV = absV;
         this.direction = normalizedV > 0 ? "down" : "up";
-        this.lastTrackedY = smoothedY;
-      } else if (absV < this.thresholds.minVelocity * 0.5) {
-        this.armed = true;
+        // Seed from the previous raw position so the motion that caused the
+        // trigger is counted too — at low frame rates the entire sweep can
+        // sit between the previous sample and this one, and seeding from the
+        // EMA-lagged smoothed y leaves the total just short of the threshold.
+        this.lastTrackedY = prevRawY ?? smoothedY;
+        // Fall through: this frame already contributes displacement.
+      } else {
+        if (absV < this.thresholds.minVelocity * 0.5) {
+          this.armed = true;
+        }
+        return null;
       }
-      return null;
     }
 
     // this._state === "tracking"
@@ -108,10 +123,13 @@ export class StrumDetector {
       this.peakAbsV = absV;
     }
 
-    // Accumulate displacement in handScale units, scaled by sensitivity.
-    const dy = ((smoothedY - this.lastTrackedY) / this.calibration.handScale) * this.calibration.sensitivity;
+    // Accumulate displacement in handScale units from the RAW y. Using the
+    // smoothed y here makes the total converge to (full sweep − EMA lag) from
+    // below, so at low frame rates the threshold is approached but never
+    // crossed; signed raw deltas still cancel jitter at high frame rates.
+    const dy = ((y - this.lastTrackedY) / this.calibration.handScale) * this.calibration.sensitivity;
     this.accumulatedDisplacement += dy;
-    this.lastTrackedY = smoothedY;
+    this.lastTrackedY = y;
 
     const currentDir: Direction | null = normalizedV > 0 ? "down" : normalizedV < 0 ? "up" : this.direction;
 
@@ -174,6 +192,7 @@ export class StrumDetector {
     this.peakAbsV = 0;
     this.direction = null;
     this.lastTrackedY = 0;
+    this.previousRawY = null;
   }
 
   /** Public state — 'cooldown' is folded into 'idle'. */

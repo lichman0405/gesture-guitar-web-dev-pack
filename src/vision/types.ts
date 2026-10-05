@@ -83,8 +83,8 @@ export interface VisionTier {
 
 export const VISION_TIERS: Record<VisionTier["id"], VisionTier> = {
   high: { id: "high", width: 640, height: 480, targetHz: 30 },
-  medium: { id: "medium", width: 512, height: 384, targetHz: 24 },
-  low: { id: "low", width: 448, height: 336, targetHz: 18 },
+  medium: { id: "medium", width: 448, height: 336, targetHz: 24 },
+  low: { id: "low", width: 320, height: 240, targetHz: 24 },
 };
 
 /** Messages main thread -> vision worker. */
@@ -96,6 +96,7 @@ export type VisionWorkerInMessage =
       /** Absolute URL directory of the MediaPipe WASM runtime. */
       wasmBaseUrl: string;
       maxHands: number;
+      /** Preferred delegate; the worker benchmarks and may pick the other. */
       delegate: "GPU" | "CPU";
     }
   | { type: "detect"; bitmap: ImageBitmap; t: number }
@@ -103,6 +104,12 @@ export type VisionWorkerInMessage =
 
 /** Messages vision worker -> main thread. */
 export type VisionWorkerOutMessage =
-  | { type: "ready" }
+  | {
+      type: "ready";
+      /** Delegate actually running (chosen by startup benchmark). */
+      delegate: "GPU" | "CPU";
+      /** Startup benchmark timings per tried delegate (null = not tried/failed). */
+      benchmark: { gpuMs: number | null; cpuMs: number | null };
+    }
   | { type: "frame"; frame: VisionFrame }
   | { type: "error"; message: string };

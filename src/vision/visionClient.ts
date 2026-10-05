@@ -31,7 +31,9 @@ export class VisionClient {
   private worker: Worker | null = null;
   private stream: MediaStream | null = null;
   private videoEl: HTMLVideoElement | null = null;
-  private pumpHandle: ReturnType<typeof setInterval> | null = null;
+  private pumpTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastSendAt = 0;
   private canvas: OffscreenCanvas | HTMLCanvasElement | null = null;
   private canvasCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
   private busy = false;
@@ -39,15 +41,17 @@ export class VisionClient {
   private inferenceMsSamples: number[] = [];
   private frameTimestamps: number[] = [];
   private initResolved = false;
+  private activeDelegate: "GPU" | "CPU" | null = null;
+  private benchmark: { gpuMs: number | null; cpuMs: number | null } | null = null;
 
   constructor(options?: VisionClientOptions) {
-    this.tier = options?.tier ?? "medium";
+    this.tier = options?.tier ?? "low";
     this.adaptive = options?.adaptive ?? false;
     this.onFrame = options?.onFrame;
     this.onError = options?.onError;
     this.onTierChange = options?.onTierChange;
     this.videoDeviceId = options?.videoDeviceId;
-    this.adaptiveController = new AdaptiveTierController();
+    this.adaptiveController = new AdaptiveTierController({ startTier: this.tier });
   }
 
   /**
@@ -68,10 +72,12 @@ export class VisionClient {
       throw new Error(error.message);
     }
     try {
+      // Request a good source resolution once; per-tier scaling happens on
+      // the analysis canvas, so tier changes never restart the stream.
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: VISION_TIERS[this.tier].width },
-          height: { ideal: VISION_TIERS[this.tier].height },
+          width: { ideal: VISION_TIERS.high.width },
+          height: { ideal: VISION_TIERS.high.height },
           ...(this.videoDeviceId ? { deviceId: { exact: this.videoDeviceId } } : {}),
         },
         audio: false,
@@ -126,7 +132,7 @@ export class VisionClient {
             reject(new Error("Worker init timeout"));
           }
         }
-      }, 8000);
+      }, 20000); // generous: the worker benchmarks delegates during init
 
       worker.onmessage = (e: MessageEvent<VisionWorkerOutMessage>) => {
         const msg = e.data;
@@ -134,6 +140,8 @@ export class VisionClient {
           if (!this.initResolved) {
             this.initResolved = true;
             clearTimeout(timeout);
+            this.activeDelegate = msg.delegate;
+            this.benchmark = msg.benchmark;
             resolve();
           }
         } else if (msg.type === "error") {
@@ -193,7 +201,6 @@ export class VisionClient {
 
   private startPump(): void {
     const tier = VISION_TIERS[this.tier];
-    const intervalMs = 1000 / tier.targetHz;
 
     if (typeof OffscreenCanvas !== "undefined") {
       this.canvas = new OffscreenCanvas(tier.width, tier.height);
@@ -206,32 +213,71 @@ export class VisionClient {
       this.canvasCtx = canvas.getContext("2d") as CanvasRenderingContext2D;
     }
 
-    this.pumpHandle = setInterval(() => {
-      this.tick().catch((err) => {
-        this.onError?.({ kind: "worker-error", message: String(err) });
-      });
-    }, intervalMs);
+    this.lastSendAt = 0;
+    this.scheduleTick(0);
   }
 
   private stopPump(): void {
-    if (this.pumpHandle) {
-      clearInterval(this.pumpHandle);
-      this.pumpHandle = null;
+    if (this.pumpTimer) {
+      clearTimeout(this.pumpTimer);
+      this.pumpTimer = null;
     }
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
+  /**
+   * Self-scheduling pump: the next frame is sent as soon as the previous
+   * response arrives (throttled to targetHz), so no time is lost waiting for
+   * an interval boundary. A watchdog recovers the pump if a worker response
+   * is ever lost — with a plain setInterval+busy design one lost response
+   * freezes the pipeline at 0 fps forever.
+   */
+  private scheduleTick(delayMs: number): void {
+    if (this.pumpTimer) clearTimeout(this.pumpTimer);
+    this.pumpTimer = setTimeout(() => {
+      this.pumpTimer = null;
+      this.tick().catch((err) => {
+        this.onError?.({ kind: "worker-error", message: String(err) });
+        this.scheduleTick(250);
+      });
+    }, delayMs);
+  }
+
+  private armWatchdog(): void {
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = setTimeout(() => {
+      this.watchdogTimer = null;
+      if (this.busy) {
+        // Response never arrived — drop the frame and keep the loop alive.
+        this.busy = false;
+        this.scheduleTick(0);
+      }
+    }, 1000);
   }
 
   private async tick(): Promise<void> {
     if (!this.videoEl || !this.worker || !this.canvas || !this.canvasCtx || this.busy) return;
-    if (this.videoEl.readyState < 2) return;
+    if (this.videoEl.readyState < 2) {
+      this.scheduleTick(50);
+      return;
+    }
 
     this.busy = true;
     let bitmap: ImageBitmap | null = null;
     try {
       this.canvasCtx.drawImage(this.videoEl, 0, 0, this.canvas.width, this.canvas.height);
-      bitmap = await createImageBitmap(this.canvas);
+      bitmap =
+        this.canvas instanceof OffscreenCanvas
+          ? this.canvas.transferToImageBitmap() // zero-copy move
+          : await createImageBitmap(this.canvas);
       const t = performance.now() / 1000;
+      this.lastSendAt = performance.now();
       const msg: VisionWorkerInMessage = { type: "detect", bitmap, t };
       this.worker.postMessage(msg, [bitmap]);
+      this.armWatchdog();
     } catch (err) {
       bitmap?.close();
       this.busy = false;
@@ -241,6 +287,10 @@ export class VisionClient {
 
   private handleFrame(frame: VisionFrame): void {
     this.busy = false;
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
     this.onFrame?.(frame);
 
     const now = performance.now();
@@ -261,24 +311,27 @@ export class VisionClient {
         this.setTier(newTier);
       }
     }
+
+    // Schedule the next frame immediately, throttled to the tier rate.
+    const intervalMs = 1000 / VISION_TIERS[this.tier].targetHz;
+    const elapsed = performance.now() - this.lastSendAt;
+    this.scheduleTick(Math.max(0, intervalMs - elapsed));
   }
 
-  /** Change the active quality tier. */
+  /** Change the active quality tier. Resizes the analysis canvas only —
+   *  the camera stream itself is resolution-independent (we downscale), so
+   *  tier changes are instant and never black out the pipeline. */
   setTier(id: VisionTier["id"]): void {
     if (id === this.tier) return;
     this.tier = id;
-    this.adaptiveController.reset();
+    this.adaptiveController.sync(id);
     this.onTierChange?.(id);
-    if (this.videoEl && this.stream) {
-      this.stopPump();
-      this.stream.getTracks().forEach((t) => t.stop());
-      this.stream = null;
-      this.videoEl.srcObject = null;
-      this.startStream().then(() => {
-        this.startPump();
-      }).catch(() => {
-        // Error already reported via onError
-      });
+    if (this.canvas) {
+      const tier = VISION_TIERS[id];
+      // Assigning width/height also resets the 2D context state; drawImage
+      // usage is unaffected.
+      this.canvas.width = tier.width;
+      this.canvas.height = tier.height;
     }
   }
 
@@ -288,7 +341,13 @@ export class VisionClient {
   }
 
   /** Return recent performance statistics. */
-  getStats(): { fps: number; avgInferenceMs: number } {
+  getStats(): {
+    fps: number;
+    avgInferenceMs: number;
+    delegate: "GPU" | "CPU" | null;
+    tier: VisionTier["id"];
+    benchmark: { gpuMs: number | null; cpuMs: number | null } | null;
+  } {
     const now = performance.now();
     while (this.frameTimestamps.length > 0 && this.frameTimestamps[0] < now - 1000) {
       this.frameTimestamps.shift();
@@ -298,7 +357,13 @@ export class VisionClient {
       this.inferenceMsSamples.length > 0
         ? this.inferenceMsSamples.reduce((a, b) => a + b, 0) / this.inferenceMsSamples.length
         : 0;
-    return { fps, avgInferenceMs };
+    return {
+      fps,
+      avgInferenceMs,
+      delegate: this.activeDelegate,
+      tier: this.tier,
+      benchmark: this.benchmark,
+    };
   }
 
   /** Stop everything and fully release the camera. */
@@ -318,6 +383,8 @@ export class VisionClient {
     this.busy = false;
     this.frameTimestamps = [];
     this.inferenceMsSamples = [];
+    this.activeDelegate = null;
+    this.benchmark = null;
     this.adaptiveController.reset();
   }
 }

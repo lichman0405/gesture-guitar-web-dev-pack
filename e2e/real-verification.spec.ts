@@ -21,7 +21,13 @@ interface GgwController {
 }
 interface GgwVision {
   currentState: string;
-  getStats: () => { fps: number; avgInferenceMs: number };
+  getStats: () => {
+    fps: number;
+    avgInferenceMs: number;
+    delegate: "GPU" | "CPU" | null;
+    tier: string;
+    benchmark: { gpuMs: number | null; cpuMs: number | null } | null;
+  };
 }
 
 declare global {
@@ -172,13 +178,23 @@ test.describe("Real vision stack (real model + WASM + worker + camera)", () => {
 
     const stats = await page.evaluate(() => {
       const s = window.__ggw!.vision().getStats();
-      return { fps: s.fps as number, inferenceMs: s.avgInferenceMs as number };
+      return {
+        fps: s.fps as number,
+        inferenceMs: s.avgInferenceMs as number,
+        delegate: s.delegate as "GPU" | "CPU" | null,
+        benchmark: s.benchmark,
+      };
     });
     expect(stats.inferenceMs).toBeGreaterThan(0);
     // Real inference is happening (headless CI uses SwiftShader software GL,
     // so per-frame cost can be hundreds of ms; on real GPU hardware this is
     // typically tens of ms and the adaptive tier keeps the pump responsive).
     expect(stats.inferenceMs).toBeLessThan(2000);
+    // The startup delegate benchmark must have picked a working delegate
+    // (in headless SwiftShader this is usually CPU — exactly what the
+    // benchmark is for).
+    expect(stats.delegate).not.toBeNull();
+    expect(stats.benchmark).not.toBeNull();
 
     // The fake camera shows no hands → calibration must fail with a
     // hands-related reason, and the fallback path must work.

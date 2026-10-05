@@ -123,3 +123,55 @@ source — everything else real).
 - Remaining genuinely hardware-bound item: recognition accuracy on real hands in
   real lighting needs a physical camera + hands; everything up to the landmark
   boundary is now verified running for real.
+
+## Phase 12 — Performance: real-camera lag + strum overhaul (done)
+
+User report on real hardware: "卡。识别非常慢。完全无法实现扫弦。" (laggy, very
+slow recognition, strumming impossible). Diagnosed with a headed-Chromium,
+real-camera, real-GPU diagnostic (scripts/diag-real-camera.mjs) sampling
+fps/inferenceMs/tier every 2 s via the window.__ggw dev hook.
+
+Baseline before fixes (real camera, real GPU): fps 17/0/1/0/12/3 — the pipeline
+kept collapsing to 0 and the tier flapped; strums could not fire.
+
+Four root causes found and fixed:
+
+1. Pump freeze on a lost worker response (the "卡"). The frame pump was
+   setInterval + busy-flag: if the worker ever dropped one response, busy stayed
+   true forever → 0 fps permanently. Replaced with a self-scheduling pump (the
+   response handler schedules the next setTimeout tick, throttled to the tier
+   rate) plus a 1 s watchdog that clears busy and reschedules if a response is
+   ever lost (visionClient.ts).
+2. Tier-flap camera restarts. setTier used to restart the camera stream (~1 s
+   blackout each time) and reset() the adaptive controller, whose stale tier then
+   disagreed with the client — every upgrade was reverted on the next sample, a
+   flap loop. Now setTier only resizes the analysis canvas (the stream is
+   resolution-independent, requested once at 640x480) and the controller gets a
+   new sync(id) method that adopts the applied tier (adaptiveTier.ts).
+3. No GPU/CPU delegate selection. GPU delegate is only faster with a REAL GPU;
+   with software GL (SwiftShader, blocklisted drivers) it is 130-590 ms vs ~7 ms
+   on XNNPACK CPU. The worker now benchmarks the preferred delegate at startup
+   (1 warmup + 3 timed detectForVideo runs on a dummy bitmap) and also tries CPU
+   when GPU is null or >60 ms, keeping the winning HandLandmarker instance
+   (handLandmarker.worker.ts). The ready message carries {delegate, benchmark};
+   the Perform screen debug mode shows Delegate / Tier / Startup bench.
+4. Strum detector mathematically unable to fire below ~16 fps. Displacement was
+   accumulated from the EMA-smoothed y, which converges to (sweep − EMA lag) from
+   below — at low frame rates the 0.6 handScale threshold was approached but
+   never crossed, so every strum silently aborted. Now displacement accumulates
+   from RAW y (signed deltas still cancel jitter at high fps) and the trigger
+   frame seeds lastTrackedY from the PREVIOUS raw frame so the triggering motion
+   counts (strumDetector.ts). VelocityEstimator window raised 0.06 → 0.12 s with
+   adaptive retention max(window, 2.2 x gap-EMA) so the slope estimate survives
+   sparse frames (velocityEstimator.ts). Strum now fires AT the trigger frame at
+   12 fps (acc = 1.5 immediately). Traced with scripts/debug-strum.ts; regression
+   tests added for 12 fps and 8 fps down/up sweeps plus 8 fps slow-drift
+   rejection (strumDetector.test.ts, 25 motion tests).
+
+After fixes, same real camera + real GPU (diag-real-camera.mjs):
+- ready {"delegate":"GPU","benchmark":{"gpuMs":4.57,"cpuMs":null}}
+- fps 23-24 @ medium → steady 30 @ high, tier upgrades smooth, no collapse
+- avgInferenceMs ~7-8 ms at 640x480 (was ~130-148 ms effective under flapping)
+
+Gates after fixes: tsc ✓, lint ✓, 238 unit tests ✓, build ✓, 9/9 E2E ✓
+(real-verification vision spec now also asserts a delegate + benchmark exist).

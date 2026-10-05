@@ -19,15 +19,23 @@ export class AdaptiveTierController {
   private readonly windowSize: number;
   private readonly overloadMs: number;
   private readonly cooldownSeconds: number;
+  private readonly startTier: VisionTier["id"];
   private samples: number[] = [];
   private lastChangeTimeSeconds = -Infinity;
   private fastStreak = 0;
-  private _currentTier: VisionTier["id"] = "medium";
+  private _currentTier: VisionTier["id"];
 
-  constructor(options?: { windowSize?: number; overloadMs?: number; cooldownSeconds?: number }) {
+  constructor(options?: {
+    windowSize?: number;
+    overloadMs?: number;
+    cooldownSeconds?: number;
+    startTier?: VisionTier["id"];
+  }) {
     this.windowSize = options?.windowSize ?? 20;
     this.overloadMs = options?.overloadMs ?? 50;
     this.cooldownSeconds = options?.cooldownSeconds ?? 4;
+    this.startTier = options?.startTier ?? "medium";
+    this._currentTier = this.startTier;
   }
 
   /** The currently selected tier id. */
@@ -83,6 +91,18 @@ export class AdaptiveTierController {
     this.samples = [];
     this.lastChangeTimeSeconds = -Infinity;
     this.fastStreak = 0;
-    this._currentTier = "medium";
+    this._currentTier = this.startTier;
+  }
+
+  /**
+   * Adopt an externally applied tier and clear measurement state. Must be
+   * called whenever the owner changes tiers — otherwise the controller's
+   * stale tier immediately disagrees with the owner's and every upgrade is
+   * reverted on the next sample (a flap loop).
+   */
+  sync(id: VisionTier["id"]): void {
+    this.samples = [];
+    this.fastStreak = 0;
+    this._currentTier = id;
   }
 }

@@ -148,8 +148,22 @@ export class VisionSession {
     this.setState("stopped");
   }
 
-  getStats(): { fps: number; avgInferenceMs: number } {
-    return this.client?.getStats() ?? { fps: 0, avgInferenceMs: 0 };
+  getStats(): {
+    fps: number;
+    avgInferenceMs: number;
+    delegate: "GPU" | "CPU" | null;
+    tier: VisionTier["id"];
+    benchmark: { gpuMs: number | null; cpuMs: number | null } | null;
+  } {
+    return (
+      this.client?.getStats() ?? {
+        fps: 0,
+        avgInferenceMs: 0,
+        delegate: null,
+        tier: "low",
+        benchmark: null,
+      }
+    );
   }
 
   getDebugStats(): PipelineDebugStats {

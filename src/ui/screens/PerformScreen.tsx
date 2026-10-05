@@ -58,6 +58,9 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
   const [debug, setDebug] = useState<{
     fps: number;
     inferenceMs: number;
+    delegate: string;
+    tier: string;
+    benchmark: string;
     stats: PipelineDebugStats;
   } | null>(null);
 
@@ -65,10 +68,16 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
   useEffect(() => {
     if (!visionSession || displayMode !== "debug") return;
     const id = setInterval(() => {
-      const { fps, avgInferenceMs } = visionSession.getStats();
+      const s = visionSession.getStats();
       setDebug({
-        fps,
-        inferenceMs: avgInferenceMs,
+        fps: s.fps,
+        inferenceMs: s.avgInferenceMs,
+        delegate: s.delegate ?? "—",
+        tier: s.tier,
+        benchmark:
+          s.benchmark === null
+            ? "—"
+            : `GPU ${s.benchmark.gpuMs?.toFixed(0) ?? "✗"} ms / CPU ${s.benchmark.cpuMs?.toFixed(0) ?? "✗"} ms`,
         stats: visionSession.getDebugStats(),
       });
     }, 250);
@@ -204,6 +213,12 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                   <dd data-testid="debug-fps">{debug.fps}</dd>
                   <dt>Inference</dt>
                   <dd>{debug.inferenceMs.toFixed(1)} ms</dd>
+                  <dt>Delegate</dt>
+                  <dd data-testid="debug-delegate">{debug.delegate}</dd>
+                  <dt>Tier</dt>
+                  <dd>{debug.tier}</dd>
+                  <dt>Startup bench</dt>
+                  <dd>{debug.benchmark}</dd>
                   <dt>Chord candidate</dt>
                   <dd>
                     {debug.stats.chordCandidate

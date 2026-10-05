@@ -190,3 +190,63 @@ describe("StrumDetector", () => {
     expect(events).toHaveLength(1);
   });
 });
+
+/**
+ * Degraded frame rates: when the camera pipeline struggles (slow delegate,
+ * lost worker responses), the detector must keep working — a strum is a
+ * ~150 ms gesture, so at 8–12 fps it spans only 1–3 samples.
+ */
+describe("StrumDetector at degraded frame rates", () => {
+  function traceAtFps(
+    startY: number,
+    endY: number,
+    duration: number,
+    fps: number,
+    startT = 0,
+  ): Array<{ y: number; t: number }> {
+    const dt = 1 / fps;
+    const steps = Math.max(1, Math.round(duration / dt));
+    const trace: Array<{ y: number; t: number }> = [];
+    for (let i = 0; i <= steps; i++) {
+      trace.push({ t: startT + i * dt, y: startY + (endY - startY) * (i / steps) });
+    }
+    return trace;
+  }
+
+  function sweepWithDwell(fps: number): Array<{ y: number; t: number }> {
+    const sweep = traceAtFps(0.4, 0.7, 0.12, fps);
+    const dwell = traceAtFps(0.7, 0.7, 0.6, fps, sweep[sweep.length - 1].t);
+    dwell.shift();
+    return sweep.concat(dwell);
+  }
+
+  it("fires a down strum at 12 fps", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    const events = runTrace(detector, sweepWithDwell(12));
+    expect(events).toHaveLength(1);
+    expect(events[0].direction).toBe("down");
+  });
+
+  it("fires a down strum at 8 fps", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    const events = runTrace(detector, sweepWithDwell(8));
+    expect(events).toHaveLength(1);
+    expect(events[0].direction).toBe("down");
+  });
+
+  it("fires an up strum at 8 fps", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    const sweep = traceAtFps(0.7, 0.4, 0.12, 8);
+    const dwell = traceAtFps(0.4, 0.4, 0.6, 8, sweep[sweep.length - 1].t);
+    dwell.shift();
+    const events = runTrace(detector, sweep.concat(dwell));
+    expect(events).toHaveLength(1);
+    expect(events[0].direction).toBe("up");
+  });
+
+  it("still rejects slow drift at 8 fps", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    const events = runTrace(detector, traceAtFps(0.4, 0.6, 1.5, 8));
+    expect(events).toHaveLength(0);
+  });
+});
