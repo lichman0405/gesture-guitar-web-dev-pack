@@ -57,9 +57,9 @@ export function App() {
       }
       return true;
     } catch (err) {
+      console.error("Audio startup failed", err);
       setFatalError(
-        `Audio could not start: ${err instanceof Error ? err.message : String(err)}. ` +
-          "Check that your browser allows audio output and try again.",
+        "无法启动音频。请检查浏览器是否允许播放声音，关闭其他占用音频设备的应用后重试。",
       );
       return false;
     }
@@ -142,7 +142,7 @@ export function App() {
   if (fatalError) {
     return (
       <main className="screen error-screen">
-        <h2>Something went wrong</h2>
+        <h2>启动遇到问题</h2>
         <p>{fatalError}</p>
         <button
           onClick={() => {
@@ -150,7 +150,7 @@ export function App() {
             setScreen("landing");
           }}
         >
-          Back to start
+          返回首页
         </button>
       </main>
     );

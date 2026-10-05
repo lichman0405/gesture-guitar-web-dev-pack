@@ -24,7 +24,7 @@ test.describe("Keyboard simulation mode (acceptance B)", () => {
     // Down strum.
     await page.keyboard.press("ArrowDown");
     await expect(direction).toHaveText("▼");
-    await expect(page.locator(".strum-intensity")).toContainText("normal");
+    await expect(page.locator(".strum-intensity")).toContainText("正常");
 
     // Slot 5 → G major, up strum.
     await page.keyboard.press("5");
@@ -34,19 +34,19 @@ test.describe("Keyboard simulation mode (acceptance B)", () => {
 
     // Mute toggle → damped articulation.
     await page.keyboard.press("Space");
-    await expect(page.locator(".mute-badge")).toHaveText("MUTED");
+    await expect(page.locator(".mute-badge")).toHaveText("闷音中");
     await page.keyboard.press("ArrowDown");
-    await expect(page.locator(".strum-intensity")).toContainText("muted");
+    await expect(page.locator(".strum-intensity")).toContainText("闷音");
     await page.keyboard.press("Space");
     await expect(page.locator(".mute-badge")).toHaveCount(0);
 
     // Accent intensity (Shift+strum).
     await page.keyboard.press("Shift+ArrowDown");
-    await expect(page.locator(".strum-intensity")).toContainText("accent");
+    await expect(page.locator(".strum-intensity")).toContainText("重扫");
 
     // Soft intensity (Ctrl+strum).
     await page.keyboard.press("Control+ArrowDown");
-    await expect(page.locator(".strum-intensity")).toContainText("soft");
+    await expect(page.locator(".strum-intensity")).toContainText("轻扫");
   });
 
   test("explicit chord keys and minor modifier work", async ({ page }) => {

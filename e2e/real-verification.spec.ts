@@ -163,9 +163,9 @@ test.describe("Real vision stack (real model + WASM + worker + camera)", () => {
     await page.getByTestId("continue-button").click();
 
     // Calibration starts once camera + worker + model are all live.
-    // Reaching "Calibrating…" proves the REAL 7.8 MB model loaded and the
+    // Reaching "正在校准…" proves the REAL 7.8 MB model loaded and the
     // inference loop runs — a model/worker failure lands on camera-error.
-    await expect(page.locator("text=Calibrating…")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText("正在校准…")).toBeVisible({ timeout: 60000 });
 
     // Real inference round-trips: wait until frames actually flow, then
     // assert measured inference cost is real and sane.
@@ -200,10 +200,10 @@ test.describe("Real vision stack (real model + WASM + worker + camera)", () => {
     // hands-related reason, and the fallback path must work.
     await expect(page.locator(".calibrate-failed")).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".calibrate-failed p[role='alert']")).not.toContainText(
-      /camera could not be started/i,
+      /无法启动摄像头/,
     );
 
-    await page.getByText("Continue without camera").click();
+    await page.getByText("切换到键盘演奏").click();
     await expect(page.getByTestId("perform-screen")).toBeVisible();
 
     expect(pageErrors).toEqual([]);

@@ -82,7 +82,7 @@ describe("evaluateSession", () => {
     expect(result.strumExpected).toBe(2);
     expect(result.strumHit).toBe(1);
     expect(result.missedStrums).toBe(1);
-    expect(result.barIssues).toContainEqual({ bar: 0, message: "missed strum" });
+    expect(result.barIssues).toContainEqual({ bar: 0, message: "漏扫" });
   });
 
   it("one extra strum", () => {
@@ -115,7 +115,7 @@ describe("evaluateSession", () => {
     expect(result.directionCorrect).toBe(0);
     expect(result.barIssues).toContainEqual({
       bar: 0,
-      message: "wrong direction",
+      message: "扫弦方向错误",
     });
   });
 
@@ -148,7 +148,7 @@ describe("evaluateSession", () => {
     expect(result.chordHit).toBe(1);
     expect(result.barIssues).toContainEqual({
       bar: 1,
-      message: "expected G, played Em",
+      message: "目标和弦 G，实际演奏 Em",
     });
   });
 
@@ -159,7 +159,7 @@ describe("evaluateSession", () => {
     expect(result.chordHit).toBe(0);
     expect(result.barIssues).toContainEqual({
       bar: 0,
-      message: "no chord change",
+      message: "未切换和弦",
     });
   });
 
@@ -178,7 +178,7 @@ describe("evaluateSession", () => {
     expect(result.unstableChordBars).toEqual([0]);
     expect(result.barIssues).toContainEqual({
       bar: 0,
-      message: "unstable chord bar",
+      message: "和弦切换不稳定",
     });
   });
 

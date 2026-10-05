@@ -16,9 +16,9 @@ interface Props {
 }
 
 const MODES: { id: PlayMode; label: string }[] = [
-  { id: "free", label: "Free Play" },
-  { id: "guided", label: "Guided Rhythm" },
-  { id: "song", label: "Song Mode" },
+  { id: "free", label: "自由演奏" },
+  { id: "guided", label: "节奏引导" },
+  { id: "song", label: "歌曲练习" },
 ];
 
 const TIME_SIGNATURES: TimeSignature[] = ["4/4", "3/4", "6/8"];
@@ -31,22 +31,22 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
     }));
   return (
     <main className="screen setup">
-      <h2>Setup</h2>
+      <h2>演奏设置</h2>
 
       <section className="field">
-        <label htmlFor="handedness">Handedness</label>
+        <label htmlFor="handedness">惯用手</label>
         <select
           id="handedness"
           value={settings.handedness}
           onChange={(e) => onChange({ handedness: e.target.value as Handedness })}
         >
-          <option value="right">Right-handed (left hand chords)</option>
-          <option value="left">Left-handed (right hand chords)</option>
+          <option value="right">右手扫弦（左手选和弦）</option>
+          <option value="left">左手扫弦（右手选和弦）</option>
         </select>
       </section>
 
       <section className="field">
-        <label htmlFor="mode">Play mode</label>
+        <label htmlFor="mode">演奏模式</label>
         <select
           id="mode"
           value={settings.mode}
@@ -62,7 +62,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
 
       {(settings.mode === "guided" || settings.mode === "song") && (
         <section className="field">
-          <label htmlFor="pattern">Strumming pattern</label>
+          <label htmlFor="pattern">扫弦节奏</label>
           <select
             id="pattern"
             value={settings.guidedPatternId}
@@ -81,7 +81,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
 
       {settings.mode === "song" && (
         <section className="field">
-          <label htmlFor="progression">Chord progression (one chord per bar)</label>
+          <label htmlFor="progression">和弦进行（每小节一个和弦）</label>
           <input
             id="progression"
             type="text"
@@ -95,31 +95,31 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
                   .filter((c) => c.length > 0),
               });
             }}
-            placeholder="e.g. C G Am F"
+            placeholder="例如：C G Am F"
           />
           {invalidSong && (
             <p className="field-warning" role="alert">
-              Enter at least one valid major or minor chord, for example C G Am F.
+              请至少输入一个有效的大和弦或小和弦，例如 C G Am F。
             </p>
           )}
         </section>
       )}
 
       <section className="field">
-        <label htmlFor="chord-mapping">Chord mapping</label>
+        <label htmlFor="chord-mapping">和弦映射</label>
         <select
           id="chord-mapping"
           value={settings.chordMappingMode}
           onChange={(e) => onChange({ chordMappingMode: e.target.value as "scale" | "custom" })}
         >
-          <option value="scale">Scale Mode (10 chords per key)</option>
-          <option value="custom">Custom Chord Set</option>
+          <option value="scale">按调性分配（每个调性 10 个和弦）</option>
+          <option value="custom">自定义和弦</option>
         </select>
       </section>
 
       {settings.chordMappingMode === "scale" ? (
         <section className="field">
-          <label htmlFor="key">Key</label>
+          <label htmlFor="key">调性</label>
           <select
             id="key"
             value={settings.key ?? "C"}
@@ -127,18 +127,18 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
           >
             {MAJOR_KEYS.map((k) => (
               <option key={k} value={k}>
-                {k} major
+                {k} 大调
               </option>
             ))}
           </select>
         </section>
       ) : (
         <fieldset className="field custom-mapping">
-          <legend>Custom slot mapping</legend>
+          <legend>自定义手势和弦</legend>
           {SLOT_IDS.map((slotId, index) => {
             return (
               <label key={slotId}>
-                Slot {index + 1} · {GESTURE_LABELS[DEFAULT_SLOT_GESTURES[slotId]]}
+                手势 {index + 1} · {GESTURE_LABELS[DEFAULT_SLOT_GESTURES[slotId]]}
                 <select
                   value={settings.customMapping[slotId] ?? ""}
                   onChange={(e) =>
@@ -147,7 +147,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
                     })
                   }
                 >
-                  <option value="">— unassigned —</option>
+                  <option value="">— 未分配 —</option>
                   {CHORD_VOCABULARY.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -161,7 +161,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
       )}
 
       <section className="field">
-        <label htmlFor="bpm">BPM: {settings.bpm}</label>
+        <label htmlFor="bpm">速度（每分钟拍数）：{settings.bpm}</label>
         <input
           id="bpm"
           type="range"
@@ -173,7 +173,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
       </section>
 
       <section className="field">
-        <label htmlFor="meter">Time signature</label>
+        <label htmlFor="meter">拍号</label>
         <select
           id="meter"
           value={settings.timeSignature}
@@ -195,10 +195,10 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
             checked={settings.metronomeOn}
             onChange={(e) => onChange({ metronomeOn: e.target.checked })}
           />
-          Metronome (audible)
+          开启节拍器声音
         </label>
         <label htmlFor="count-in">
-          Count-in bars
+          预备拍小节数
           <input
             id="count-in"
             type="number"
@@ -211,14 +211,14 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
       </section>
 
       <section className="field">
-        <label htmlFor="sensitivity">Strum sensitivity: {settings.sensitivity.toFixed(2)}</label>
+        <label htmlFor="sensitivity">扫弦灵敏度： {settings.sensitivity.toFixed(2)}</label>
         <input id="sensitivity" type="range" min={0.25} max={3} step={0.25}
           value={settings.sensitivity} onChange={(e) => onChange({ sensitivity: Number(e.target.value) })} />
-        <small>Increase if light strokes are missed; decrease if still hands trigger strums.</small>
+        <small>轻扫漏触发时调高；静止时误触发则调低。</small>
       </section>
 
       <section className="field">
-        <label htmlFor="preset">Instrument</label>
+        <label htmlFor="preset">吉他音色</label>
         <select
           id="preset"
           value={settings.instrumentPreset}
@@ -233,10 +233,10 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
       </section>
 
       <div className="actions">
-        {onKeyboardMode && <button disabled={invalidSong} onClick={onKeyboardMode}>Play with keyboard</button>}
-        <button onClick={onBack}>Back</button>
+        {onKeyboardMode && <button disabled={invalidSong} onClick={onKeyboardMode}>使用键盘演奏</button>}
+        <button onClick={onBack}>返回</button>
         <button disabled={invalidSong} className="primary" onClick={onContinue} data-testid="continue-button">
-          Continue
+          继续
         </button>
       </div>
     </main>

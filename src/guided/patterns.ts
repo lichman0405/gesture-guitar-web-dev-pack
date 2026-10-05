@@ -67,19 +67,19 @@ function generateSteps(id: string, sig: TimeSignature): StrumStep[] | null {
 export const STRUM_PATTERNS: StrumPattern[] = [
   {
     id: "down-beats",
-    name: "Down Beats",
+    name: "每拍向下扫",
     timeSignatures: ["4/4", "3/4", "6/8"],
     steps: makeDownBeats("4/4"),
   },
   {
     id: "down-up-8ths",
-    name: "Down-Up Eighths",
+    name: "八分音符上下交替",
     timeSignatures: ["4/4", "3/4", "6/8"],
     steps: makeDownUp8ths("4/4"),
   },
   {
     id: "folk-432",
-    name: "Folk 4-3-2",
+    name: "民谣节奏（下 下上 上下上）",
     timeSignatures: ["4/4"],
     steps: makeFolk432(),
   },

@@ -29,8 +29,8 @@ test("ten minutes of debug-mode vision, audio and repeated recording remain heal
   await page.goto("/");
   await page.getByTestId("start-button").click();
   await page.getByTestId("continue-button").click();
-  await expect(page.getByText("Use defaults & continue")).toBeVisible({ timeout: 60_000 });
-  await page.getByText("Use defaults & continue").click();
+  await expect(page.getByText("使用默认参数继续")).toBeVisible({ timeout: 60_000 });
+  await page.getByText("使用默认参数继续").click();
   const started = Date.now();
   let cycles = 0;
   while (Date.now() - started < 600_000) {
@@ -39,7 +39,7 @@ test("ten minutes of debug-mode vision, audio and repeated recording remain heal
     await expect.poll(() => page.evaluate(() => window.__analyserInputs.size)).toBe(1);
     await page.keyboard.press(cycles % 2 === 0 ? "1" : "5");
     await page.getByTestId("record-button").click();
-    await expect(page.getByTestId("mic-status")).toContainText("Microphone recording");
+    await expect(page.getByTestId("mic-status")).toContainText("正在录制麦克风");
     await page.keyboard.press("ArrowDown");
     await page.waitForTimeout(1000);
     await page.keyboard.press("ArrowUp");
@@ -59,7 +59,7 @@ test("ten minutes of debug-mode vision, audio and repeated recording remain heal
     console.log(`[soak] ${Math.floor((Date.now() - started) / 1000)}s; ${cycles} recordings; errors=${errors.length}`);
     expect(errors).toEqual([]);
   }
-  await page.getByText("Exit session", { exact: true }).click();
+  await page.getByText("结束演奏", { exact: true }).click();
   await expect(page.getByTestId("keyboard-mode-button")).toBeVisible();
   expect(Date.now() - started).toBeGreaterThanOrEqual(600_000);
   expect(cycles).toBeGreaterThan(10);

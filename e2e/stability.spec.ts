@@ -42,7 +42,7 @@ test.describe("Stability (acceptance N)", () => {
       await page.keyboard.press("1");
       await expect(page.getByTestId("current-chord")).toHaveText("C");
       await page.keyboard.press("ArrowDown");
-      await page.getByText("Exit session").click();
+      await page.getByText("结束演奏").click();
       await expect(page.getByTestId("keyboard-mode-button")).toBeVisible();
     }
 

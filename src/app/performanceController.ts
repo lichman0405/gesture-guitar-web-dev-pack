@@ -349,7 +349,7 @@ export class PerformanceController {
     const { stream, error } = await requestMicrophone();
     if (!stream) {
       if (isCurrent()) {
-        this.store.set({ micStatus: "unavailable", micError: error ?? "Microphone unavailable" });
+        this.store.set({ micStatus: "unavailable", micError: error ?? "麦克风不可用，请检查设备与权限。" });
       }
       return;
     }
@@ -370,13 +370,14 @@ export class PerformanceController {
       this.micStartOffset = Math.max(0, this.bus.now() - startedAt);
       this.store.set({ micStatus: "recording" });
     } catch (err) {
+      console.warn("Microphone capture failed", err);
       capture.dispose();
       stream.getTracks().forEach((t) => t.stop());
       if (isCurrent()) {
         this.micStream = null;
         this.store.set({
           micStatus: "unavailable",
-          micError: err instanceof Error ? err.message : "Microphone capture failed",
+          micError: "麦克风录制启动失败，请刷新页面后重试。",
         });
       }
     }

@@ -99,7 +99,7 @@ export const GESTURE_LABELS: Record<GestureId, string> = {
   index: "食指", "index-middle": "食指＋中指", "index-middle-ring": "食指＋中指＋无名指",
   "four-fingers": "四指伸直，拇指收起", "open-palm": "五指张开", "thumbs-up": "竖起拇指",
   pinky: "小指", "index-pinky": "食指＋小指（摇滚）", "thumb-index": "拇指＋食指（L）",
-  "thumb-pinky": "拇指＋小指（电话）", "ok-sign": "OK", "pick-grip": "捏拨片", fist: "握拳",
+  "thumb-pinky": "拇指＋小指（电话）", "ok-sign": "拇食指成圈", "pick-grip": "捏拨片", fist: "握拳",
 };
 
 /** Gestures reserved for the performance hand / system control (never chord slots). */

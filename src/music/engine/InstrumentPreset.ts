@@ -21,7 +21,7 @@ export interface InstrumentPreset {
 export const INSTRUMENT_PRESETS: Record<string, InstrumentPreset> = {
   "acoustic-steel": {
     id: "acoustic-steel",
-    name: "Acoustic Steel",
+    name: "钢弦木吉他",
     decaySeconds: 3.2,
     brightness: 0.75,
     strumSpacingMs: { down: 11, up: 14 },
@@ -30,7 +30,7 @@ export const INSTRUMENT_PRESETS: Record<string, InstrumentPreset> = {
   },
   nylon: {
     id: "nylon",
-    name: "Nylon",
+    name: "尼龙弦吉他",
     decaySeconds: 2.4,
     brightness: 0.5,
     strumSpacingMs: { down: 13, up: 16 },
@@ -39,7 +39,7 @@ export const INSTRUMENT_PRESETS: Record<string, InstrumentPreset> = {
   },
   "clean-electric": {
     id: "clean-electric",
-    name: "Clean Electric",
+    name: "清音电吉他",
     decaySeconds: 4.5,
     brightness: 0.6,
     strumSpacingMs: { down: 9, up: 12 },

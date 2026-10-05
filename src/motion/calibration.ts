@@ -173,7 +173,7 @@ export class Calibrator {
     if (totalSamples < 8 || handScale < 0.03) {
       this._state = "failed";
       this._failureReason =
-        "Could not see both hands clearly. Move back so both hands fit in frame and hold still.";
+        "无法清楚识别双手。请稍微后退，让双手完整出现在画面里，并保持静止。";
       this._result = null;
       return;
     }

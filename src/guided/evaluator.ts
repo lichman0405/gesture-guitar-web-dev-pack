@@ -100,10 +100,10 @@ export function evaluateSession(
       if (chordsInHitWindow.length > 0) {
         chordMissMessages.set(
           exp.bar,
-          `expected ${exp.chord}, played ${chordsInHitWindow[0].chord}`
+          `目标和弦 ${exp.chord}，实际演奏 ${chordsInHitWindow[0].chord}`
         );
       } else {
-        chordMissMessages.set(exp.bar, "no chord change");
+        chordMissMessages.set(exp.bar, "未切换和弦");
       }
     }
   }
@@ -133,16 +133,16 @@ export function evaluateSession(
 
   for (const bar of Array.from(allBars).sort((a, b) => a - b)) {
     if (missedStrumBars.has(bar)) {
-      barIssues.push({ bar, message: "missed strum" });
+      barIssues.push({ bar, message: "漏扫" });
     }
     if (wrongDirectionBars.has(bar)) {
-      barIssues.push({ bar, message: "wrong direction" });
+      barIssues.push({ bar, message: "扫弦方向错误" });
     }
     if (chordMissBars.has(bar)) {
       barIssues.push({ bar, message: chordMissMessages.get(bar)! });
     }
     if (unstableBars.has(bar)) {
-      barIssues.push({ bar, message: "unstable chord bar" });
+      barIssues.push({ bar, message: "和弦切换不稳定" });
     }
   }
 

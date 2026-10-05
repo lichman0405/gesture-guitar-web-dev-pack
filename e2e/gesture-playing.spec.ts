@@ -4,16 +4,16 @@ import { test, expect } from "@playwright/test";
 test("ten custom gesture chords persist and all new keyboard slots work", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("start-button").click();
-  await page.getByLabel("Chord mapping", { exact: true }).selectOption("custom");
+  await page.getByLabel("和弦映射", { exact: true }).selectOption("custom");
   for (const [slot, chord] of [[7, "Bm"], [8, "F#m"], [9, "C#"], [10, "G#m"]] as const) {
-    await page.getByLabel(new RegExp(`^Slot ${slot} ·`)).selectOption(chord);
+    await page.getByLabel(new RegExp(`^手势 ${slot} ·`)).selectOption(chord);
   }
   await page.reload();
   await page.getByTestId("start-button").click();
   for (const [slot, chord] of [[7, "Bm"], [8, "F#m"], [9, "C#"], [10, "G#m"]] as const) {
-    await expect(page.getByLabel(new RegExp(`^Slot ${slot} ·`))).toHaveValue(chord);
+    await expect(page.getByLabel(new RegExp(`^手势 ${slot} ·`))).toHaveValue(chord);
   }
-  await page.getByText("Play with keyboard", { exact: true }).click();
+  await page.getByText("使用键盘演奏", { exact: true }).click();
   for (const [key, chord] of [["7", "Bm"], ["8", "F#m"], ["9", "C#"], ["0", "G#m"]] as const) {
     await page.keyboard.press(key);
     await expect(page.getByTestId("current-chord")).toHaveText(chord);

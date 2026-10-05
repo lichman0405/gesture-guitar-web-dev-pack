@@ -368,3 +368,28 @@ real audio, twenty alternating strokes and exported performance JSON. Raw camera
 model accuracy remains a human-test question; this hotfix specifically reproduces
 and fixes the reported geometric failure conditions. No camera pump, watchdog,
 calibration, audio synthesis or recording lifecycle changes.
+
+## Phase 16 — 中文界面与完整使用说明（2026-10-05）
+
+- 首页、演奏设置、校准、演奏和录音结果页统一为中文，包括按钮、
+  无障碍标签、节奏提示、音色名称、扫弦节奏名称和逐小节评价。
+- 三种显示模式改为「普通 / 表演 / 调试」，调试面板的候选手势、
+  已确认手势、运算设备、画质、闷音和双手控制进度均显示中文。
+  页面语言设为 zh-CN，浏览器标题改为「手势吉他」。
+- 摄像头和麦克风失败显示中文处理建议，避免直接把浏览器的英文
+  异常放到用户界面；原始音频错误仍可在开发控制台查看。
+  导出失败显示中文重试建议，保留内部原始错误供调试。
+- Windows 启动提示改为中文，PowerShell 脚本使用 UTF-8 BOM，
+  兼容启动器调用的 Windows PowerShell 5.1。
+- 重写 README：双击与命令行启动、键盘试弹、十种手势、C/Cm
+  区分、自然摇滚姿势、扫弦/闷音、双手控制、设置与显示模式、
+  录音试听下载、保存时机、常见问题和开发验证命令。
+- 和弦符号、快捷键、文件格式和机器使用的标识保持兼容；未改动
+  手势算法、帧泵、WASM 补丁、启动运算设备比较、看门狗或音频合成。
+
+验证：类型检查、lint、生产构建通过；31 个文件的 322 项单元与
+集成测试通过。开发版 18 项常规浏览器测试通过（首次运行有一处
+校准测试遗漏旧英文定位，改为中文后单独复验通过）；生产版
+14 项浏览器流程通过，开发专用手势注入测试按预期跳过。
+十分钟长测仍为显式启用，界面翻译未重复 Phase 13 的完整长测。
+中文启动脚本通过 PowerShell 语法解析检查。

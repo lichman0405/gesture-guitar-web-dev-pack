@@ -6,6 +6,7 @@ import { useAppStore } from "../hooks";
 import { LevelMeter } from "../../audio/meters";
 import { CameraView } from "../camera/CameraView";
 import { GestureHelp } from "../GestureHelp";
+import { GESTURE_LABELS } from "../../gesture/gestureTypes";
 import { L_THUMB_SPREAD_MIN } from "../../gesture/gestureVocabulary";
 
 interface Props {
@@ -45,15 +46,24 @@ function MeterBar({ meter, label }: { meter: LevelMeter | null; label: string })
 }
 
 const KEYBOARD_HINTS: [string, string][] = [
-  ["1–9 / 0", "chord slots 1–10"],
-  ["C D E F G A B (+Shift)", "explicit chord (minor)"],
-  ["↓ / ↑", "strum down / up"],
-  ["Shift / Ctrl + strum", "accent / soft"],
-  ["Space", "mute"],
-  ["R", "record"],
-  ["P", "pause"],
-  ["Esc", "stop"],
+  ["1–9 / 0", "选择第 1–10 个手势和弦"],
+  ["C D E F G A B (+Shift)", "直接选择和弦（加 Shift 选小和弦）"],
+  ["↓ / ↑", "向下 / 向上扫弦"],
+  ["Shift / Ctrl＋↓ / ↑", "重扫 / 轻扫"],
+  ["空格", "切换闷音"],
+  ["R", "开始 / 停止录音"],
+  ["P", "暂停 / 恢复节拍"],
+  ["Esc", "停止录音"],
 ];
+
+const DISPLAY_MODE_LABELS = { normal: "普通", performance: "表演", debug: "调试" };
+const TIER_LABELS: Record<string, string> = { high: "高", medium: "中", low: "低" };
+const CONTROL_LABELS: Record<string, string> = {
+  ready: "准备就绪",
+  "toggle-pause": "暂停 / 恢复",
+  "toggle-record": "开始 / 停止录音",
+  stop: "停止",
+};
 
 export function PerformScreen({ controller, visionSession, onRecalibrate, onExit,
   handedness = "right", sensitivity = 1, onSensitivityChange }: Props) {
@@ -86,7 +96,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
         benchmark:
           s.benchmark === null
             ? "—"
-            : `GPU ${s.benchmark.gpuMs?.toFixed(0) ?? "✗"} ms / CPU ${s.benchmark.cpuMs?.toFixed(0) ?? "✗"} ms`,
+            : `图形处理器 ${s.benchmark.gpuMs?.toFixed(0) ?? "失败"} 毫秒 / 中央处理器 ${s.benchmark.cpuMs?.toFixed(0) ?? "失败"} 毫秒`,
         stats: visionSession.getDebugStats(),
       });
     }, 250);
@@ -119,7 +129,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
 
   return (
     <main className={`screen perform mode-${displayMode}`} data-testid="perform-screen">
-      <div className="display-mode-switch" role="group" aria-label="Display mode">
+      <div className="display-mode-switch" role="group" aria-label="显示模式">
         {(["normal", "performance", "debug"] as const).map((mode) => (
           <button
             key={mode}
@@ -127,21 +137,21 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
             onClick={() => setDisplayMode(mode)}
             data-testid={`display-mode-${mode}`}
           >
-            {mode[0].toUpperCase() + mode.slice(1)}
+            {DISPLAY_MODE_LABELS[mode]}
           </button>
         ))}
       </div>
 
       <div className="perform-main">
         <section className="chord-display" aria-live="polite">
-          <div className="chord-label">Current chord</div>
+          <div className="chord-label">当前和弦</div>
           <div
             className={`chord-value${displayMode === "performance" ? " performance-big" : ""}`}
             data-testid="current-chord"
           >
             {ui.chord ?? "—"}
           </div>
-          {ui.muteActive && <div className="mute-badge">MUTED</div>}
+          {ui.muteActive && <div className="mute-badge">闷音中</div>}
         </section>
 
         <section className="strum-display">
@@ -151,12 +161,12 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                 {strum.direction === "down" ? "▼" : "▲"}
               </span>
               <span className="strum-intensity">
-                {strum.intensity >= 0.7 ? "accent" : strum.intensity >= 0.4 ? "normal" : "soft"}
-                {strum.articulation === "muted" ? " · muted" : ""}
+                {strum.intensity >= 0.7 ? "重扫" : strum.intensity >= 0.4 ? "正常" : "轻扫"}
+                {strum.articulation === "muted" ? " · 闷音" : ""}
               </span>
             </>
           ) : (
-            <span className="strum-idle">strum to play</span>
+            <span className="strum-idle">选好和弦，扫弦开始演奏</span>
           )}
         </section>
 
@@ -175,21 +185,21 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
             {ui.guided.expectedChord && (
               <div className="guided-chords">
                 <span>
-                  Expected: <strong data-testid="expected-chord">{ui.guided.expectedChord}</strong>
+                  目标和弦： <strong data-testid="expected-chord">{ui.guided.expectedChord}</strong>
                 </span>
-                <span className="guided-next">Next: {ui.guided.nextChord}</span>
+                <span className="guided-next">下一和弦： {ui.guided.nextChord}</span>
               </div>
             )}
             {ui.guided.nextStrum && (
               <div className="guided-next-strum" data-testid="next-strum">
-                Next strum:{" "}
+                下一次扫弦：{" "}
                 <span className={`strum-arrow ${ui.guided.nextStrum.direction}`}>
                   {ui.guided.nextStrum.direction === "down" ? "▼" : "▲"}
                 </span>
               </div>
             )}
             <div className="guided-bar">
-              Bar {ui.guided.bar + 1}
+              第 {ui.guided.bar + 1} 小节
               {ui.guided.totalBars > 0 ? ` / ${ui.guided.totalBars}` : ""}
             </div>
           </section>
@@ -197,17 +207,17 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
 
         {ui.micError && (
           <p className="mic-warning" role="alert">
-            Microphone unavailable ({ui.micError}) — guitar performance still records.
+            麦克风不可用（{ui.micError}），仍可录制吉他演奏。
           </p>
         )}
         {ui.exportState === "exporting" && (
-          <p className="exporting-note">Rendering export locally…</p>
+          <p className="exporting-note">正在本机生成导出文件…</p>
         )}
       </div>
 
       <div className="perform-side">
         {visionSession && displayMode !== "performance" && (
-          <section className="camera-panel" aria-label="Camera preview">
+          <section className="camera-panel" aria-label="摄像头预览">
             <CameraView
               onVideoReady={bindPreview}
               getFrame={() => visionSession.frame}
@@ -216,27 +226,27 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
               showOverlay
             />
             <details className="debug-panel" open={displayMode === "debug"}>
-              <summary>Debug</summary>
+              <summary>调试信息</summary>
               {debug ? (
                 <dl>
-                  <dt>FPS</dt>
+                  <dt>每秒帧数</dt>
                   <dd data-testid="debug-fps">{debug.fps}</dd>
-                  <dt>Inference</dt>
-                  <dd>{debug.inferenceMs.toFixed(1)} ms</dd>
-                  <dt>Delegate</dt>
-                  <dd data-testid="debug-delegate">{debug.delegate}</dd>
-                  <dt>Tier</dt>
-                  <dd>{debug.tier}</dd>
-                  <dt>Startup bench</dt>
+                  <dt>识别耗时</dt>
+                  <dd>{debug.inferenceMs.toFixed(1)} 毫秒</dd>
+                  <dt>运算设备</dt>
+                  <dd data-testid="debug-delegate">{debug.delegate === "GPU" ? "图形处理器" : debug.delegate === "CPU" ? "中央处理器" : "—"}</dd>
+                  <dt>画质档位</dt>
+                  <dd>{TIER_LABELS[debug.tier] ?? "—"}</dd>
+                  <dt>启动性能测试</dt>
                   <dd>{debug.benchmark}</dd>
-                  <dt>Chord candidate</dt>
+                  <dt>候选和弦手势</dt>
                   <dd>
                     {debug.stats.chordCandidate
-                      ? `${debug.stats.chordCandidate.gestureId} (${debug.stats.chordCandidate.confidence.toFixed(2)})`
+                      ? `${GESTURE_LABELS[debug.stats.chordCandidate.gestureId]} (${debug.stats.chordCandidate.confidence.toFixed(2)})`
                       : "—"}
                   </dd>
-                  <dt>Committed</dt>
-                  <dd>{debug.stats.committedGesture ?? "—"}</dd>
+                  <dt>已确认手势</dt>
+                  <dd>{debug.stats.committedGesture ? GESTURE_LABELS[debug.stats.committedGesture] : "—"}</dd>
                   <dt>和弦手 · 拇/食/中/无名/小指</dt>
                   <dd data-testid="chord-fingers">{debug.stats.chordFingers
                     ? Object.values(debug.stats.chordFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>
@@ -245,26 +255,26 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                   <dt>扫弦手 · 拇/食/中/无名/小指</dt>
                   <dd>{debug.stats.performanceFingers
                     ? Object.values(debug.stats.performanceFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>
-                  <dt>Mute</dt>
-                  <dd>{debug.stats.muteActive ? "active" : "off"}</dd>
-                  <dt>Strum detector</dt>
-                  <dd>{debug.stats.strumState}</dd>
+                  <dt>闷音状态</dt>
+                  <dd>{debug.stats.muteActive ? "开启" : "关闭"}</dd>
+                  <dt>扫弦检测状态</dt>
+                  <dd>{debug.stats.strumState === "tracking" ? "扫弦跟踪中" : "待机"}</dd>
                   <dt>扫弦速度 / 位移 / 门槛</dt>
                   <dd>{debug.stats.strumMotion.velocity.toFixed(1)} / {Math.abs(debug.stats.strumMotion.displacement).toFixed(2)} / {debug.stats.strumMotion.minimumDisplacement.toFixed(2)}</dd>
-                  <dt>Control hold</dt>
+                  <dt>双手控制保持进度</dt>
                   <dd>
                     {debug.stats.controlHold
-                      ? `${debug.stats.controlHold.comboId} ${(debug.stats.controlHold.progress * 100).toFixed(0)}%`
+                      ? `${CONTROL_LABELS[debug.stats.controlHold.comboId] ?? "控制手势"} ${(debug.stats.controlHold.progress * 100).toFixed(0)}%`
                       : "—"}
                   </dd>
                 </dl>
               ) : (
-                <p className="hint">Debug stats appear here in Debug mode.</p>
+                <p className="hint">切换到「调试」显示模式，即可查看实时识别状态。</p>
               )}
             </details>
             {onRecalibrate && (
               <button disabled={ui.recording || ui.exportState === "exporting"} className="link" onClick={onRecalibrate}>
-                Recalibrate
+                重新校准
               </button>
             )}
             <GestureHelp controller={controller} handedness={handedness} />
@@ -276,30 +286,30 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
           </section>
         )}
 
-        {displayMode !== "performance" && <MeterBar meter={guitarMeter} label="Guitar" />}
+        {displayMode !== "performance" && <MeterBar meter={guitarMeter} label="吉他音量" />}
 
         <div className="record-row">
           {ui.recording ? (
             <>
               <span className="rec-indicator" data-testid="rec-indicator">
-                ● REC {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, "0")}
+                ● 录音中 {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, "0")}
               </span>
               <button onClick={() => controller.stopRecording()} data-testid="stop-record-button">
-                Stop
+                停止录音
               </button>
             </>
           ) : (
             <button disabled={ui.exportState === "exporting"} onClick={() => controller.startRecording()} data-testid="record-button">
-              Record
+              开始录音
             </button>
           )}
         </div>
 
         {ui.recording && (
           <p className="hint" role="status" data-testid="mic-status">
-            {ui.micStatus === "recording" ? "Microphone recording · voice stays off speakers" :
-              ui.micStatus === "requesting" ? "Allow microphone access to include your voice" :
-                "Guitar only · microphone unavailable"}
+            {ui.micStatus === "recording" ? "正在录制麦克风 · 人声不从扬声器实时播放" :
+              ui.micStatus === "requesting" ? "请允许麦克风访问，以录下你的歌声" :
+                "仅录制吉他 · 麦克风不可用"}
           </p>
         )}
 
@@ -307,16 +317,16 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
           <>
             <div className="transport-row">
               {ui.metronomeRunning ? (
-                <button onClick={() => controller.stopMetronome()}>Stop metronome</button>
+                <button onClick={() => controller.stopMetronome()}>停止节拍器</button>
               ) : (
                 <button onClick={() => controller.startMetronome()} data-testid="metronome-button">
-                  Start metronome
+                  启动节拍器
                 </button>
               )}
             </div>
 
             <details className="keyboard-hints">
-              <summary>Keyboard controls</summary>
+              <summary>键盘操作</summary>
               <table>
                 <tbody>
                   {KEYBOARD_HINTS.map(([key, desc]) => (
@@ -334,7 +344,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
         )}
 
         <button className="exit-button" onClick={onExit}>
-          Exit session
+          结束演奏
         </button>
       </div>
     </main>

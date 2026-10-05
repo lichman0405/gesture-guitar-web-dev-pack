@@ -14,16 +14,17 @@ export async function requestMicrophone(): Promise<MicRequestResult> {
     });
     return { stream, error: null };
   } catch (err) {
-    let message = "Microphone access failed";
+    let message = "无法访问麦克风，请检查设备连接与网站权限。";
     if (err instanceof DOMException) {
       if (err.name === "NotAllowedError") {
-        message = "Microphone permission denied";
-      } else {
-        message = err.message || message;
+        message = "麦克风权限被拒绝，请在浏览器的网站权限设置中允许访问。";
+      } else if (err.name === "NotFoundError") {
+        message = "未找到麦克风，请连接设备后重试。";
+      } else if (err.name === "NotReadableError") {
+        message = "麦克风无法读取，请关闭其他占用麦克风的应用后重试。";
       }
-    } else if (err instanceof Error) {
-      message = err.message;
     }
+    console.warn("Microphone access failed", err);
     return { stream: null, error: message };
   }
 }

@@ -35,7 +35,7 @@ test("repeated takes do not accumulate analyser connections on the guitar bus", 
     await expect.poll(() => page.evaluate(() => window.__analyserInputs.size)).toBe(0);
     await page.getByTestId("re-record-button").click();
   }
-  await page.getByText("Exit session", { exact: true }).click();
+  await page.getByText("结束演奏", { exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__analyserInputs.size)).toBe(0);
 });
 
@@ -62,21 +62,21 @@ async function enterCameraPerformance(page: Page) {
   await expect.poll(() => page.locator("video").evaluate((el: HTMLVideoElement) =>
     el.videoWidth > 0 && !el.paused && (el.srcObject as MediaStream)?.active === true),
     { timeout: 20_000 }).toBe(true);
-  await expect(page.getByText("Use defaults & continue")).toBeVisible({ timeout: 60_000 });
-  await page.getByText("Use defaults & continue").click();
+  await expect(page.getByText("使用默认参数继续")).toBeVisible({ timeout: 60_000 });
+  await page.getByText("使用默认参数继续").click();
   await expect(page.getByTestId("perform-screen")).toBeVisible();
 }
 
 test("settings accept typed chord spaces and enter configured keyboard mode", async ({ page }) => {
   await page.goto("/");
-  await page.getByText("Settings", { exact: true }).click();
+  await page.getByText("设置", { exact: true }).click();
   await page.locator("#mode").selectOption("song");
   await page.locator("#progression").fill("");
   await expect(page.getByTestId("continue-button")).toBeDisabled();
   await page.locator("#progression").pressSequentially("G C Am F");
   await expect(page.locator("#progression")).toHaveValue("G C Am F");
   await page.locator("#key").selectOption("G");
-  await page.getByText("Play with keyboard", { exact: true }).click();
+  await page.getByText("使用键盘演奏", { exact: true }).click();
   await page.keyboard.press("1");
   await expect(page.getByTestId("current-chord")).toHaveText("G");
 });
@@ -105,7 +105,7 @@ test("camera preview and inference survive screen changes and release on exit", 
   await page.getByTestId("re-record-button").click();
   await expect(page.getByTestId("record-button")).toBeVisible();
   await expect.poll(hasLivePreview).toBe(true);
-  await page.getByText("Exit session", { exact: true }).click();
+  await page.getByText("结束演奏", { exact: true }).click();
   expect(await page.evaluate(() => window.__mediaTracks.every((t) => t.readyState === "ended"))).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -116,7 +116,7 @@ test("cancelling pending camera startup releases a late permission result", asyn
   await page.getByTestId("start-button").click();
   await page.getByTestId("continue-button").click();
   await expect.poll(() => page.evaluate(() => window.__mediaRequested)).toBe(true);
-  await page.getByText("Back", { exact: true }).click();
+  await page.getByText("返回", { exact: true }).click();
   await page.evaluate(() => window.__releaseMedia?.());
   await expect.poll(() => page.evaluate(() => window.__mediaTracks.every((t) => t.readyState === "ended"))).toBe(true);
   await expect(page.getByTestId("continue-button")).toBeVisible();
@@ -140,7 +140,7 @@ test("voice WAV contains PCM and an already selected chord is preserved in expor
   await page.getByTestId("keyboard-mode-button").click();
   await page.keyboard.press("g");
   await page.getByTestId("record-button").click();
-  await expect(page.getByTestId("mic-status")).toContainText("Microphone recording");
+  await expect(page.getByTestId("mic-status")).toContainText("正在录制麦克风");
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(1200);
   await page.getByTestId("stop-record-button").click();
@@ -169,12 +169,12 @@ test("camera and microphone denial leave keyboard guitar usable", async ({ page 
   await page.goto("/");
   await page.getByTestId("start-button").click();
   await page.getByTestId("continue-button").click();
-  await expect(page.getByRole("alert")).toContainText("permission was denied");
-  await page.getByText("Continue in keyboard mode").click();
+  await expect(page.getByRole("alert")).toContainText("摄像头权限被拒绝");
+  await page.getByText("切换到键盘演奏").click();
   await page.keyboard.press("g");
   await page.getByTestId("record-button").click();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("alert")).toContainText("Microphone permission denied");
+  await expect(page.getByRole("alert")).toContainText("麦克风权限被拒绝");
   await page.getByTestId("stop-record-button").click();
   await expect(page.getByTestId("export-guitar-wav")).toBeEnabled();
   await expect(page.getByTestId("export-performance-json")).toBeEnabled();

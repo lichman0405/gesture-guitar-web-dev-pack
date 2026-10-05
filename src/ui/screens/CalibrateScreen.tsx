@@ -8,7 +8,7 @@ interface CalibrateScreenProps {
   sensitivity: number;
   /** Calibration succeeded (or user skipped with defaults) → enter performance. */
   onComplete: () => void;
-  /** Continue without camera (keyboard mode). */
+  /** 切换到键盘演奏 (keyboard mode). */
   onSkipCamera: () => void;
   onCancel: () => void;
 }
@@ -20,16 +20,16 @@ function visionErrorMessage(session: VisionSession): string {
   const err = session.visionError;
   switch (err?.kind) {
     case "denied":
-      return "Camera permission was denied. Allow camera access in your browser settings and try again.";
+      return "摄像头权限被拒绝。请在浏览器的网站权限设置中允许摄像头访问，再重试。";
     case "no-device":
-      return "No camera was found. Connect a camera and try again.";
+      return "未找到摄像头。请连接摄像头后重试。";
     case "worker-error":
     case "timeout":
-      return "The hand-tracking engine failed to start. Reload the page and try again.";
+      return "手部识别引擎启动失败。请刷新页面后重试。";
     case "unsupported":
-      return "This browser does not support the camera features required. Try a recent Chrome or Edge.";
+      return "当前浏览器不支持所需的摄像头功能。请使用较新版本的 Chrome 或 Edge。";
     default:
-      return "Camera could not be started. Check permission and that no other app is using it.";
+      return "无法启动摄像头。请检查访问权限，并关闭其他正在使用摄像头的应用。";
   }
 }
 
@@ -94,7 +94,7 @@ export function CalibrateScreen({
       } else if (cal.state === "failed") {
         setFailureReason(
           cal.failureReason ??
-            "Could not calibrate. Make sure both hands are visible and hold still.",
+            "校准失败。请让双手完整出现在画面里，并保持静止。",
         );
         setPhase("failed");
       }
@@ -111,10 +111,9 @@ export function CalibrateScreen({
 
   return (
     <main className="screen calibrate-screen">
-      <h2>Calibration</h2>
+      <h2>手势校准</h2>
       <p className="hint">
-        Show <strong>both hands</strong> to the camera and settle into a comfortable
-        playing position. Hold still for a moment.
+        请让<strong>双手</strong>完整出现在摄像头画面里，摆好舒适的演奏姿势，并保持静止片刻。
         扫弦手放在准备弹的位置，拇指和食指可以像捏拨片一样轻捏；校准后用手腕连续上下扫。
       </p>
 
@@ -127,29 +126,29 @@ export function CalibrateScreen({
         />
       </div>
 
-      {phase === "starting" && <p>Starting camera…</p>}
+      {phase === "starting" && <p>正在启动摄像头…</p>}
 
       {phase === "collecting" && (
         <div className="calibrate-progress">
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
           </div>
-          <p>Calibrating… {Math.round(progress * 100)}%</p>
+          <p>正在校准… {Math.round(progress * 100)}%</p>
         </div>
       )}
 
-      {phase === "done" && <p className="calibrate-done">Ready! Entering performance…</p>}
+      {phase === "done" && <p className="calibrate-done">校准完成！正在进入演奏…</p>}
 
       {phase === "failed" && (
         <div className="calibrate-failed">
           <p role="alert">{failureReason}</p>
           <div className="row">
-            <button onClick={beginCalibration}>Retry calibration</button>
+            <button onClick={beginCalibration}>重新校准</button>
             <button onClick={() => {
               session.pipeline.setCalibration({ ...DEFAULT_CALIBRATION, sensitivity });
               onComplete();
-            }}>Use defaults &amp; continue</button>
-            <button onClick={onSkipCamera}>Continue without camera</button>
+            }}>使用默认参数继续</button>
+            <button onClick={onSkipCamera}>切换到键盘演奏</button>
           </div>
         </div>
       )}
@@ -158,7 +157,7 @@ export function CalibrateScreen({
         <div className="calibrate-failed">
           <p role="alert">{visionError}</p>
           <div className="row">
-            <button onClick={onSkipCamera}>Continue in keyboard mode</button>
+            <button onClick={onSkipCamera}>切换到键盘演奏</button>
           </div>
         </div>
       )}
@@ -171,7 +170,7 @@ export function CalibrateScreen({
             onCancel();
           }}
         >
-          Back
+          返回
         </button>
       </div>
     </main>
