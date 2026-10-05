@@ -40,9 +40,32 @@ Decisions:
 - VisionSession: camera lifecycle + pipeline ownership; calibration persisted to localStorage (ggw.calibration.v1) with validation on load.
 - UI: CameraView (mirrored video + rAF landmark/corridor overlay, no per-frame React state), CalibrateScreen (progress, retry, use-defaults, keyboard fallback), PerformScreen camera panel + 4 Hz debug stats + recalibrate. App flow: landing → setup → calibrate → perform; keyboard demo path unchanged.
 
-## Phase 6 — Recording (in progress)
+## Phase 6 — Recording (done, commit 7230b18 + wiring commit)
 
 - Contracts: recording/types.ts, performanceJson.ts (schema-conformant export doc).
 - GuitarEngine.setMuted gained optional `when` for offline-scheduled damping.
 - Delegated: wavEncoder, mixer, guitarRenderer (offline re-render from event log), micCapture + PCM worklet, sessionExporter (per-track failure isolation).
+- PerformanceController: start/stop recording, mic capture with graceful denial (acceptance L), guided-plan auto-transport with count-in, evaluation at stop, async export with results screen navigation. Export object URLs revoked on dispose.
+- ResultsScreen: mix playback, per-artifact downloads, failure list, evaluation metrics.
 
+## Phase 7 — Guided mode (done)
+
+- STRUM_PATTERNS (down-beats, down-up-8ths, folk-432) via getPatternForMeter(id, sig); GuidedPlan.barCount for pattern-only guided mode.
+- buildExpectedEvents + evaluateSession (greedy nearest strum match ±150 ms, population-stddev timing spread, chord hit windows, unstable bars).
+- SetupScreen: pattern select (filtered by time signature) + song progression input with vocabulary warning. PerformScreen: expected/next chord, next-strum arrow, bar counter.
+
+## Phase 8 — UX polish (done, commit 7eaa127)
+
+- Display modes on perform screen: normal / performance (minimal oversized-chord layout) / debug (stats panel forced open, 4 Hz polling gated to debug mode only).
+- Full journey landing → setup → calibrate → perform → results works without dev console.
+
+## Phase 9 — Hardening (done)
+
+- Playwright E2E on installed Chromium: 4 keyboard-mode specs (acceptance B deterministic path) + 2 stability specs (acceptance N proxy). All 6 pass.
+- Bugs found by E2E and fixed:
+  - Session re-entry re-attached a KeyboardSimulator bound to the disposed controller's bus → keyboardRef nulled on exitSession so re-entry rebuilds it.
+  - Record toggle desync when mixing keyboard start + UI stop → KeyboardSimulator accepts isRecording() source-of-truth callback wired to the controller store.
+- A11y basics: aria-live chord readout, role=alert mic warning, labelled meters/camera panel/display-mode group.
+- Windows smoke: dev server + build + E2E all run on this Windows host.
+
+## Phase 10 — Final audit (in progress)

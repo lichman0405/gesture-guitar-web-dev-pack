@@ -57,10 +57,23 @@ test.describe("Keyboard simulation mode (acceptance B)", () => {
     await expect(chord).toHaveText("Am");
   });
 
-  test("record toggle updates recording state", async ({ page }) => {
+  test("record stop exports the session and lands on results", async ({ page }) => {
     await page.keyboard.press("r");
     await expect(page.getByTestId("rec-indicator")).toBeVisible();
+
+    // Perform something so the session has events.
+    await page.keyboard.press("1");
+    await page.keyboard.press("ArrowDown");
+
     await page.getByTestId("stop-record-button").click();
+
+    // Stopping a recording runs the local export, then shows results.
+    await expect(page.getByTestId("results-screen")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId("export-performance-json")).toBeVisible();
+
+    // Re-record returns to the perform screen ready for another take.
+    await page.getByTestId("re-record-button").click();
+    await expect(page.getByTestId("perform-screen")).toBeVisible();
     await expect(page.getByTestId("record-button")).toBeVisible();
   });
 

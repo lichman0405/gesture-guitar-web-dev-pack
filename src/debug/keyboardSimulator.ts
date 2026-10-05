@@ -15,6 +15,12 @@ export interface KeyboardSimulatorOptions {
   resolveSlot?: (slotId: string) => string | null;
   /** Event source override (default "keyboard"). */
   source?: EventSource;
+  /**
+   * Source of truth for recording state. When provided, the record toggle key
+   * derives record-start/record-stop from this instead of an internal flag, so
+   * mixing keyboard and UI record controls stays consistent.
+   */
+  isRecording?: () => boolean;
 }
 
 /**
@@ -26,7 +32,7 @@ export interface KeyboardSimulatorOptions {
 export class KeyboardSimulator {
   private readonly bus: EventBus;
   private readonly options: Required<Pick<KeyboardSimulatorOptions, "source">> &
-    Pick<KeyboardSimulatorOptions, "resolveSlot">;
+    Pick<KeyboardSimulatorOptions, "resolveSlot" | "isRecording">;
   private _muteActive = false;
   private _isRecording = false;
   private _isPaused = false;
@@ -39,6 +45,7 @@ export class KeyboardSimulator {
     this.options = {
       source: options?.source ?? "keyboard",
       resolveSlot: options?.resolveSlot,
+      isRecording: options?.isRecording,
     };
     this.boundHandler = this.handleKeyDown.bind(this);
   }
@@ -174,7 +181,8 @@ export class KeyboardSimulator {
     }
 
     if (e.code === "KeyR") {
-      this._isRecording = !this._isRecording;
+      const current = this.options.isRecording?.() ?? this._isRecording;
+      this._isRecording = !current;
       const action: ControlAction = this._isRecording ? "record-start" : "record-stop";
       const event: ControlEvent = {
         type: "control",

@@ -48,6 +48,7 @@ export function App() {
       if (!keyboardRef.current) {
         keyboardRef.current = new KeyboardSimulator(controller.bus, {
           resolveSlot: (slot) => controller.resolveSlot(slot),
+          isRecording: () => controller.store.getSnapshot().recording,
         });
       }
       keyboardRef.current.attach(window);
@@ -97,6 +98,7 @@ export function App() {
 
   const exitSession = useCallback(() => {
     keyboardRef.current?.detach();
+    keyboardRef.current = null;
     visionRef.current?.stop();
     visionRef.current = null;
     controllerRef.current?.dispose();
