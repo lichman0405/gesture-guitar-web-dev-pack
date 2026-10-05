@@ -171,3 +171,11 @@ motion legs → pick-grip/mute distinction → real browser/audio/export checks.
 Exit: typecheck/lint/build green; 308 unit tests; 18 development browser tests
 plus relevant final rechecks; 14 production flow tests. Real webcam/GPU still
 runs at up to 30 FPS. Human recognition accuracy needs actual playing feedback.
+
+## Phase 15 — C/L and rock usability follow-up (completed, 2026-10-05)
+
+Human feedback -> failing natural-pose regressions -> palm-relative thumb spread
+-> exclusive pointing/L decisions -> rock-specific finger-coupling tolerance
+-> Cm/C/E pipeline and actual browser audio/export verification.
+
+Exit: 322 unit/integration tests, six relevant E2E, typecheck/lint/build green.

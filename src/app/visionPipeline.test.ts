@@ -255,3 +255,26 @@ describe("pick grip vs mute", () => {
     expect(events.filter((e) => e.type === "mute")).toMatchObject([{ active: true }]);
   });
 });
+
+it("switches a held L/Cm back to natural pointing/C and then relaxed rock/E", () => {
+  const pipeline = makePipeline({ resolveSlotChord: (slot) => ({ "slot-9": "Cm", "slot-1": "C", "slot-8": "E" })[slot] ?? null });
+  const wrist = { x: 0.3, y: 0.65, z: 0 };
+  const scale = 0.16;
+  const pointing = buildGestureHand("index", { physical: "Left", wrist, scale });
+  pointing.landmarks.splice(1, 4, ...[
+    { x: 0.3, y: 0 }, { x: 0.05, y: -0.19 }, { x: -0.25, y: -0.42 }, { x: -0.55, y: -0.65 },
+  ].map((p) => ({ x: wrist.x + p.x * scale, y: wrist.y + p.y * scale, z: 0 })));
+  const stages = [buildGestureHand("thumb-index", { physical: "Left", wrist, scale }), pointing,
+    buildGestureHand("index-pinky", { physical: "Left", wrist, scale, fingerCurls: { thumb: 0, ring: 0.5 } })];
+  let t = 0;
+  for (const chord of stages) {
+    chord.worldLandmarks = chord.landmarks.map((p) => ({ x: p.x - wrist.x, y: p.y - wrist.y, z: p.z }));
+    for (let i = 0; i < 9; i++, t += DT) {
+      pipeline.handleFrame(makeFrame(t, [chord,
+        buildGestureHand("pick-grip", { physical: "Right", wrist: { x: 0.75, y: 0.7, z: 0 } }),
+      ]));
+    }
+  }
+  expect(events.filter((e) => e.type === "chord").map((e) => e.type === "chord" ? e.chord : null)).toEqual(["Cm", "C", "E"]);
+  expect(events.filter((e) => e.type === "strum")).toHaveLength(0);
+});

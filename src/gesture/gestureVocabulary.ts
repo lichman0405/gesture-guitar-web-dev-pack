@@ -1,4 +1,6 @@
-import type { GestureId } from "./gestureTypes.ts";
+import type { GestureId, FingerExtension } from "./gestureTypes.ts";
+
+export const L_THUMB_SPREAD_MIN = 0.45;
 
 export interface GestureRule {
   id: GestureId;
@@ -13,6 +15,10 @@ export interface GestureRule {
   /** When set, thumbIndexTipDistance must be <= this (pinch gestures). */
   maxThumbIndexDistance?: number;
   minIndexPipAngle?: number;
+  /** L requires radial spread; pointing accepts a resting or uncertain thumb. */
+  thumbPosture?: "spread" | "resting";
+  /** Pose-specific tolerance for natural finger coupling (e.g. rock). */
+  fingerCertainty?: Partial<Record<keyof FingerExtension, number>>;
   /** When set, curlAmount must be >= this (fist-like). */
   minCurl?: number;
   /** When set, curlAmount must be <= this (open-like). */
@@ -37,7 +43,8 @@ export const GESTURE_RULES: GestureRule[] = [
   },
   {
     id: "index",
-    fingers: { thumb: false, index: true, middle: false, ring: false, pinky: false },
+    fingers: { thumb: "any", index: true, middle: false, ring: false, pinky: false },
+    thumbPosture: "resting",
   },
   {
     id: "index-middle",
@@ -58,11 +65,13 @@ export const GESTURE_RULES: GestureRule[] = [
   },
   {
     id: "index-pinky",
-    fingers: { thumb: false, index: true, middle: false, ring: false, pinky: true },
+    fingers: { thumb: "any", index: true, middle: false, ring: false, pinky: true },
+    fingerCertainty: { pinky: 0.45, middle: 0.5, ring: 0.4 },
   },
   {
     id: "thumb-index",
     fingers: { thumb: true, index: true, middle: false, ring: false, pinky: false },
+    thumbPosture: "spread",
   },
   {
     id: "thumb-pinky",

@@ -156,3 +156,15 @@ devices; real-hand accuracy and light-dependent behavior still require a person.
 Automated coverage: 308 unit tests, synthetic 21-point/3-D gesture variants,
 continuous 8–60 FPS traces and real-browser audio/export checks. These checks
 must not be reported as a measured human recognition-accuracy percentage.
+
+### Phase 15 natural-pose follow-up
+
+- Point the index with the thumb resting across the folded fingers: C must commit
+  even when that resting thumb has almost-straight joints. Then spread the thumb
+  outward into L: Cm must commit. Switching back must restore C.
+- Rock/E must accept an extended or resting thumb, a partly bent ring finger and
+  a straight little finger splayed to the side. Keep middle/ring bent; a fully
+  open hand and a half-bent index must not become rock.
+- Covered by 13 geometry regressions, an actual Cm/C/E pipeline transition and
+  the ten-pose browser test using these natural C/E variants (322 unit tests;
+  six relevant E2E passed). These remain synthetic-landmark regression checks.

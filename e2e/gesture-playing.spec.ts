@@ -50,10 +50,24 @@ test("all ten landmark poses and twenty alternating strokes reach real audio and
     let t = 0, peak = 0;
     const samples = new Float32Array(analyser.fftSize);
     for (const gesture of gestures) {
+      const wrist = { x: 0.25, y: 0.65, z: 0 };
+      const scale = 0.16;
+      const chordHand = buildGestureHand(gesture, { physical: "Left", wrist, scale,
+        ...(gesture === "index-pinky" ? { fingerCurls: { thumb: 0, ring: 0.5 } } : {}),
+      });
+      if (gesture === "index") {
+        // Reproduce C with a straight thumb resting across folded fingers.
+        chordHand.landmarks.splice(1, 4, ...[
+          { x: 0.3, y: 0 }, { x: 0.05, y: -0.19 }, { x: -0.25, y: -0.42 }, { x: -0.55, y: -0.65 },
+        ].map((p) => ({ x: wrist.x + p.x * scale, y: wrist.y + p.y * scale, z: 0 })));
+      }
+      chordHand.worldLandmarks = chordHand.landmarks.map((p) => ({
+        x: p.x - wrist.x, y: p.y - wrist.y, z: p.z,
+      }));
       const ys = [...Array(8).fill(0.7) as number[], ...[1, 2, 3, 4, 5].map((i) => 0.7 + i * 0.026), ...[1, 2, 3, 4, 5].map((i) => 0.83 - i * 0.026)];
       for (const y of ys) {
         pipeline.handleFrame({ t, inferenceMs: 8, frameWidth: 640, frameHeight: 480, hands: [
-          buildGestureHand(gesture, { physical: "Left", wrist: { x: 0.25, y: 0.65, z: 0 }, scale: 0.16 }),
+          chordHand,
           buildGestureHand("pick-grip", { physical: "Right", wrist: { x: 0.75, y, z: 0 }, scale: 0.16 }),
         ] });
         t += 1 / 30;

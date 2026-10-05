@@ -333,3 +333,38 @@ Practical limit: geometric regressions use synthetic landmarks, not labeled
 human-video accuracy measurements. Real-device diagnostics verify performance,
 not recognition correctness for all people/lighting/occlusion conditions. The
 updated app should be refreshed and recalibrated in the actual playing pose.
+
+## Phase 15 — Natural C/L separation and usable rock pose (2026-10-05)
+
+Follow-up human feedback: pointing C was being recognized as L/Cm, and the
+index+little-finger rock/E pose did not commit. Reproduced before changing code:
+6 failures across both hands using natural resting-thumb and partially bent-ring
+landmarks. Phase 14's ideal fully-curled poses did not cover these postures.
+
+- Added thumbSpread in the palm's own index-to-little-finger radial axis. Both the
+  thumb tip outside the index base and distal thumb's outward reach contribute,
+  normalized by palm width. Rotation, mirroring and 3-D tilt do not change this
+  cue. A nearly straight thumb resting across folded fingers has inward reach,
+  even though its old joint-extension score can be 100%.
+- Pointing accepts a resting/uncertain thumb. L requires both confident thumb
+  extension and outward spread >=0.45 palm widths. The rules are exclusive, so a
+  high-confidence pointing candidate cannot override a genuine L and a resting
+  straight thumb cannot choose Cm. Existing debounce remains intact.
+- Rock ignores thumb state and allows natural finger coupling: little-finger
+  certainty >=0.45, folded middle certainty >=0.50, folded ring certainty >=0.40.
+  Other gestures retain the >=0.62 certainty threshold. A fully open hand and
+  half-bent index are still rejected as rock.
+- Added actual Cm -> natural C -> relaxed rock E pipeline regression, 13 new
+  natural-posture geometry checks covering both hands, 3-D transforms, noise and
+  a sideways straight little finger. The browser's ten-gesture/audio/export test
+  now uses the reported resting-thumb C and extended-thumb/half-bent-ring E,
+  rather than only ideal synthetic poses.
+- Help explains natural C thumb placement, explicit outward L and relaxed rock.
+  Debug adds the live chord-hand thumbSpread and shared L threshold.
+
+Verification: typecheck/build/lint green; all 322 unit/integration tests passed
+(31 files); six relevant Playwright tests passed, including all ten chord slots,
+real audio, twenty alternating strokes and exported performance JSON. Raw camera
+model accuracy remains a human-test question; this hotfix specifically reproduces
+and fixes the reported geometric failure conditions. No camera pump, watchdog,
+calibration, audio synthesis or recording lifecycle changes.

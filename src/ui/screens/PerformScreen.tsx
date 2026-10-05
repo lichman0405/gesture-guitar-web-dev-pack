@@ -6,6 +6,7 @@ import { useAppStore } from "../hooks";
 import { LevelMeter } from "../../audio/meters";
 import { CameraView } from "../camera/CameraView";
 import { GestureHelp } from "../GestureHelp";
+import { L_THUMB_SPREAD_MIN } from "../../gesture/gestureVocabulary";
 
 interface Props {
   controller: PerformanceController;
@@ -239,6 +240,8 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                   <dt>和弦手 · 拇/食/中/无名/小指</dt>
                   <dd data-testid="chord-fingers">{debug.stats.chordFingers
                     ? Object.values(debug.stats.chordFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>
+                  <dt>L 拇指外展 · ≥ {L_THUMB_SPREAD_MIN}</dt>
+                  <dd>{debug.stats.chordThumbSpread?.toFixed(2) ?? "未检测到"}</dd>
                   <dt>扫弦手 · 拇/食/中/无名/小指</dt>
                   <dd>{debug.stats.performanceFingers
                     ? Object.values(debug.stats.performanceFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>

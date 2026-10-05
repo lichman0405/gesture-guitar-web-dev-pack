@@ -44,6 +44,8 @@ export interface HandFeatures {
   thumbIndexTipDistance: number;
   /** Separates a bent pick-grip index from a fully closed fist. */
   indexPipAngle?: number;
+  /** Signed thumb reach beyond the index side of the palm, in palm-width units. */
+  thumbSpread?: number;
   /** Mean curl of the four fingers: 0 = fully extended, 1 = fully curled. */
   curlAmount: number;
   handScale: number;

@@ -34,6 +34,7 @@ export interface PipelineDebugStats {
   muteActive: boolean;
   strumState: string;
   chordFingers: HandFeatures["extension"] | null;
+  chordThumbSpread: number | null;
   performanceFingers: HandFeatures["extension"] | null;
   strumMotion: StrumDetector["debug"];
   controlHold: { comboId: string; progress: number } | null;
@@ -94,6 +95,7 @@ export class VisionPipeline {
   private lastPerfCandidate: GestureCandidate | null = null;
   private lastCandidateProgress = 0;
   private lastChordFingers: HandFeatures["extension"] | null = null;
+  private lastChordThumbSpread: number | null = null;
   private lastPerfFingers: HandFeatures["extension"] | null = null;
   private lastStrumT = -Infinity;
 
@@ -200,6 +202,7 @@ export class VisionPipeline {
       : null;
     this.lastChordCandidate = chordCandidate;
     this.lastChordFingers = chordFeatures?.extension ?? null;
+    this.lastChordThumbSpread = chordFeatures?.thumbSpread ?? null;
 
     const debounce = this.debouncer.update(chordCandidate, frame.t);
     this.lastCandidateProgress = debounce.candidateProgress;
@@ -268,6 +271,7 @@ export class VisionPipeline {
       muteActive: this.muteDetector.active,
       strumState: this.strumDetector.state,
       chordFingers: this.lastChordFingers,
+      chordThumbSpread: this.lastChordThumbSpread,
       performanceFingers: this.lastPerfFingers,
       strumMotion: this.strumDetector.debug,
       controlHold: this.controlRecognizer.holdProgress,
@@ -291,6 +295,7 @@ export class VisionPipeline {
     this.lastChordEventChord = null;
     this.lastStrumT = -Infinity;
     this.lastChordFingers = this.lastPerfFingers = null;
+    this.lastChordThumbSpread = null;
     this.frameTimes = [];
   }
 }

@@ -53,6 +53,16 @@ export function extractHandFeatures(hand: NormalizedHand): HandFeatures {
     ramp(dist(p[4], p[5]), 0.25, 0.6),
   );
   const thumbIndexTipDistance = dist(p[4], p[8]);
+  // Joint straightness alone cannot distinguish an L from a thumb resting
+  // across folded fingers. Use the hand's own radial axis, independent of
+  // camera rotation, handedness and 3-D tilt. Both the tip and distal thumb
+  // must actually extend toward the outside of the index side of the palm.
+  const palmWidth = dist(p[5], p[17]);
+  const radial = { x: p[5].x - p[17].x, y: p[5].y - p[17].y, z: p[5].z - p[17].z };
+  const radialReach = (origin: Point3) => palmWidth > 1e-8
+    ? ((p[4].x - origin.x) * radial.x + (p[4].y - origin.y) * radial.y + (p[4].z - origin.z) * radial.z) / (palmWidth * palmWidth)
+    : 0;
+  const thumbSpread = Math.min(radialReach(p[5]), radialReach(p[2]));
   // A touching thumb and index is a pinch, not an abducted thumb.
   if (thumbIndexTipDistance < 0.3) extension.thumb = 0;
   fingers.thumb = extension.thumb >= 0.5;
@@ -60,6 +70,7 @@ export function extractHandFeatures(hand: NormalizedHand): HandFeatures {
     physical: hand.physical, t: hand.t, fingers, extension, tipDistances,
     thumbIndexTipDistance,
     indexPipAngle: jointAngleDegrees(p[5], p[6], p[7]),
+    thumbSpread,
     curlAmount: LONG_FINGERS.reduce((sum, name) => sum + 1 - extension[name], 0) / 4,
     handScale: hand.scale, wristRaw: hand.wristRaw, palmCenterRaw: hand.palmCenterRaw,
   };
