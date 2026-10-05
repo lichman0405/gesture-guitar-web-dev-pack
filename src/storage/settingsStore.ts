@@ -21,6 +21,10 @@ export interface AppSettings {
   instrumentPreset: string;
   /** Motion sensitivity multiplier. */
   sensitivity: number;
+  /** Guided Rhythm pattern id (see src/guided/patterns.ts). */
+  guidedPatternId: string;
+  /** Song Mode progression: one chord symbol per bar. */
+  songProgression: string[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +39,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   countInBars: 1,
   instrumentPreset: "acoustic-steel",
   sensitivity: 1,
+  guidedPatternId: "down-beats",
+  songProgression: ["C", "G", "Am", "F"],
 };
 
 export const SETTINGS_STORAGE_KEY = "ggw.settings.v1";
@@ -123,6 +129,18 @@ function sanitize(raw: unknown): AppSettings {
 
   if (typeof p.sensitivity === "number" && !Number.isNaN(p.sensitivity)) {
     merged.sensitivity = clamp(p.sensitivity, 0.25, 3);
+  }
+
+  if (typeof p.guidedPatternId === "string" && p.guidedPatternId.length > 0) {
+    merged.guidedPatternId = p.guidedPatternId;
+  }
+
+  if (
+    Array.isArray(p.songProgression) &&
+    p.songProgression.every((c) => typeof c === "string") &&
+    p.songProgression.length > 0
+  ) {
+    merged.songProgression = p.songProgression as string[];
   }
 
   return merged;

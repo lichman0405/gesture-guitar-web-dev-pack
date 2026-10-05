@@ -3,12 +3,382 @@
   font-family: "Segoe UI", system-ui, sans-serif;
   background: #101418;
   color: #e8edf2;
+  --accent: #4fc3f7;
+  --accent-strong: #ffca28;
+  --panel: #1a2129;
+  --panel-border: #2a3542;
+  --danger: #ef5350;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
 }
 
-.app-shell {
+button {
+  font: inherit;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1116;
+  font-weight: 600;
+}
+
+.screen {
+  max-width: 960px;
+  margin: 0 auto;
   padding: 2rem;
+}
+
+.landing {
+  text-align: center;
+  padding-top: 12vh;
+}
+
+.landing h1 {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+.tagline {
+  color: #9fb0c0;
+  margin-bottom: 2rem;
+}
+
+.privacy-notes {
+  list-style: none;
+  padding: 0;
+  color: #7d8fa1;
+  font-size: 0.9rem;
+  margin-bottom: 2.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.setup {
+  max-width: 640px;
+}
+
+.field {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field.inline {
+  flex-direction: row;
+  gap: 2rem;
+  align-items: center;
+}
+
+.field select,
+.field input[type="number"] {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: inherit;
+}
+
+.custom-mapping {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.custom-mapping legend {
+  padding: 0 0.5rem;
+  color: #9fb0c0;
+}
+
+.custom-mapping label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+/* Performance screen */
+.perform {
+  display: flex;
+  gap: 2rem;
+  max-width: 1100px;
+}
+
+.perform-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding-top: 4vh;
+}
+
+.chord-display {
+  text-align: center;
+  position: relative;
+}
+
+.chord-label {
+  color: #7d8fa1;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.8rem;
+}
+
+.chord-value {
+  font-size: 7rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+.mute-badge {
+  position: absolute;
+  top: 0;
+  right: -4.5rem;
+  background: var(--danger);
+  color: white;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.strum-display {
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.4rem;
+}
+
+.strum-arrow {
+  font-size: 2.5rem;
+  color: var(--accent-strong);
+}
+
+.strum-idle {
+  color: #566575;
+}
+
+.beat-display .beat-dot {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+}
+
+.beat-dot.strong {
+  background: var(--accent);
+  color: #0b1116;
+  border-color: var(--accent);
+}
+
+.beat-dot.medium {
+  border-color: var(--accent);
+}
+
+.beat-dot.off {
+  color: #566575;
+}
+
+.perform-side {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.meter-label {
+  width: 3.5rem;
+  font-size: 0.85rem;
+  color: #9fb0c0;
+}
+
+.meter-track {
+  flex: 1;
+  height: 0.7rem;
+  background: var(--panel);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #66bb6a, #ffca28, #ef5350);
+  width: 0%;
+  transition: width 40ms linear;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.rec-indicator {
+  color: var(--danger);
+  font-weight: 700;
+  animation: rec-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes rec-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.keyboard-hints {
+  font-size: 0.85rem;
+  color: #9fb0c0;
+}
+
+.keyboard-hints table {
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+}
+
+.keyboard-hints td {
+  padding: 0.15rem 0.5rem 0.15rem 0;
+}
+
+kbd {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.exit-button {
+  margin-top: auto;
+  color: #9fb0c0;
+}
+
+.error-screen {
+  text-align: center;
+  padding-top: 15vh;
+}
+
+/* Calibration screen */
+.calibrate-screen {
+  max-width: 640px;
+}
+
+.calibrate-screen .hint {
+  color: #9fb0c0;
+}
+
+.calibrate-camera {
+  max-width: 480px;
+  margin: 1rem 0;
+}
+
+.calibrate-progress .progress-track {
+  height: 0.8rem;
+  background: var(--panel);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.calibrate-progress .progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 100ms linear;
+}
+
+.calibrate-done {
+  color: #66bb6a;
+  font-weight: 600;
+}
+
+.calibrate-failed [role="alert"] {
+  color: var(--danger);
+}
+
+.calibrate-screen .row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Camera panel on perform screen */
+.camera-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.camera-panel .camera-view {
+  width: 100%;
+  max-width: 320px;
+}
+
+.debug-panel {
+  font-size: 0.8rem;
+  color: #9fb0c0;
+}
+
+.debug-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0.5rem 0 0;
+}
+
+.debug-panel dt {
+  color: #7d8fa1;
+}
+
+.debug-panel dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  padding: 0.25rem 0;
 }
