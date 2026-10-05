@@ -31,6 +31,9 @@ export class VisionClient {
   private worker: Worker | null = null;
   private stream: MediaStream | null = null;
   private videoEl: HTMLVideoElement | null = null;
+  private previewEl: HTMLVideoElement | null = null;
+  private stopped = false;
+  private cancelWorkerInit: (() => void) | null = null;
   private pumpTimer: ReturnType<typeof setTimeout> | null = null;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSendAt = 0;
@@ -59,10 +62,31 @@ export class VisionClient {
    * @param videoEl - video element that will display the camera feed
    */
   async start(videoEl: HTMLVideoElement): Promise<void> {
-    this.videoEl = videoEl;
-    await this.startStream();
-    await this.initWorker();
-    this.startPump();
+    // Capture belongs to the client, not a React screen that can unmount.
+    this.videoEl = document.createElement("video");
+    this.videoEl.muted = true;
+    this.videoEl.playsInline = true;
+    this.setPreview(videoEl);
+    try {
+      await this.startStream();
+      if (this.stopped) throw new Error("Camera startup cancelled");
+      await this.initWorker();
+      if (this.stopped) throw new Error("Camera startup cancelled");
+      this.startPump();
+    } catch (err) {
+      this.stop();
+      throw err;
+    }
+  }
+
+  /** Rebind only the visible preview; inference keeps its own video source. */
+  setPreview(el: HTMLVideoElement | null): void {
+    if (this.previewEl && this.previewEl !== el) this.previewEl.srcObject = null;
+    this.previewEl = el;
+    if (el) {
+      el.srcObject = this.stream;
+      if (this.stream) void el.play().catch(() => undefined);
+    }
   }
 
   private async startStream(): Promise<void> {
@@ -82,18 +106,19 @@ export class VisionClient {
         },
         audio: false,
       };
-      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (this.stopped) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("Camera startup cancelled");
+      }
+      this.stream = stream;
     } catch (err) {
       this.handleGetUserMediaError(err);
       throw err;
     }
     this.videoEl!.srcObject = this.stream;
-    await new Promise<void>((resolve, reject) => {
-      const el = this.videoEl!;
-      el.onloadedmetadata = () => resolve();
-      el.onerror = () => reject(new Error("video element error"));
-      el.play().catch(reject);
-    });
+    this.setPreview(this.previewEl);
+    await this.videoEl!.play();
   }
 
   private handleGetUserMediaError(err: unknown): void {
@@ -114,6 +139,10 @@ export class VisionClient {
 
   private async initWorker(delegate: "GPU" | "CPU" = "GPU"): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (this.stopped) {
+        reject(new Error("Camera startup cancelled"));
+        return;
+      }
       this.initResolved = false;
       const worker = new Worker(
         new URL("./handLandmarker.worker.ts", import.meta.url),
@@ -133,13 +162,20 @@ export class VisionClient {
           }
         }
       }, 20000); // generous: the worker benchmarks delegates during init
+      this.cancelWorkerInit = () => {
+        clearTimeout(timeout);
+        this.initResolved = true;
+        reject(new Error("Camera startup cancelled"));
+      };
 
       worker.onmessage = (e: MessageEvent<VisionWorkerOutMessage>) => {
+        if (this.stopped || this.worker !== worker) return;
         const msg = e.data;
         if (msg.type === "ready") {
           if (!this.initResolved) {
             this.initResolved = true;
             clearTimeout(timeout);
+            this.cancelWorkerInit = null;
             this.activeDelegate = msg.delegate;
             this.benchmark = msg.benchmark;
             resolve();
@@ -158,6 +194,7 @@ export class VisionClient {
           } else {
             this.onError?.({ kind: "worker-error", message: msg.message });
             this.busy = false;
+            this.scheduleTick(50);
           }
         } else if (msg.type === "frame") {
           this.handleFrame(msg.frame);
@@ -165,6 +202,7 @@ export class VisionClient {
       };
 
       worker.onerror = (err) => {
+        if (this.stopped || this.worker !== worker) return;
         if (!this.initResolved) {
           this.initResolved = true;
           clearTimeout(timeout);
@@ -178,6 +216,7 @@ export class VisionClient {
         } else {
           this.onError?.({ kind: "worker-error", message: err.message });
           this.busy = false;
+          this.scheduleTick(50);
         }
       };
 
@@ -274,6 +313,11 @@ export class VisionClient {
           ? this.canvas.transferToImageBitmap() // zero-copy move
           : await createImageBitmap(this.canvas);
       const t = performance.now() / 1000;
+      if (this.stopped || !this.worker) {
+        bitmap.close();
+        this.busy = false;
+        return;
+      }
       this.lastSendAt = performance.now();
       const msg: VisionWorkerInMessage = { type: "detect", bitmap, t };
       this.worker.postMessage(msg, [bitmap]);
@@ -368,6 +412,9 @@ export class VisionClient {
 
   /** Stop everything and fully release the camera. */
   stop(): void {
+    this.stopped = true;
+    this.cancelWorkerInit?.();
+    this.cancelWorkerInit = null;
     this.stopPump();
     this.terminateWorker();
     if (this.stream) {
@@ -378,6 +425,7 @@ export class VisionClient {
       this.videoEl.srcObject = null;
       this.videoEl = null;
     }
+    this.setPreview(null);
     this.canvas = null;
     this.canvasCtx = null;
     this.busy = false;

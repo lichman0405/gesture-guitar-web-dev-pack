@@ -165,4 +165,15 @@ describe("VisionPipeline", () => {
     expect(stats.fps).toBeGreaterThan(0);
     expect(stats.inferenceMs).toBe(10);
   });
+
+  it("releases an active vision mute when performance controls are disabled", () => {
+    const pipeline = makePipeline();
+    const t = feedStatic(pipeline, 0, 8, "index", "fist");
+    pipeline.setEnabled(false);
+    feedStatic(pipeline, t, 50, "index-middle", "fist");
+    expect(events.filter((event) => event.type === "mute")).toMatchObject([
+      { active: true }, { active: false },
+    ]);
+    expect(events.filter((event) => event.type === "control")).toHaveLength(0);
+  });
 });

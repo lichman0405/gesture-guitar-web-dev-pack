@@ -86,10 +86,13 @@ export async function exportSession(
         if (hasGuitar && vocal.sampleRate !== guitarRate) {
           vocalSamples = resampleLinear(vocalSamples, vocal.sampleRate, guitarRate);
         }
-        tracks.push({ samples: vocalSamples, gain: 1.0 });
         if (!hasGuitar) {
           mixRate = vocal.sampleRate;
         }
+        const offset = Math.max(0, Math.round(vocal.startOffsetSeconds * mixRate));
+        const aligned = new Float32Array(offset + vocalSamples.length);
+        aligned.set(vocalSamples, offset);
+        tracks.push({ samples: aligned, gain: 1.0 });
       }
 
       if (hasGuitar) {

@@ -2,8 +2,8 @@ import { test, expect } from "@playwright/test";
 
 /**
  * Acceptance N — stability: repeated record start/stop cycles and session
- * re-entry must not break the app (leak/crash proxy). A full 10-minute soak
- * is a manual/hardware-level check; this exercises the same code paths.
+ * re-entry must not break the app (leak/crash proxy). The opt-in full
+ * wall-clock check lives in soak.spec.ts (npm run test:soak).
  */
 test.describe("Stability (acceptance N)", () => {
   test("repeated record/stop/re-record cycles stay healthy", async ({ page }) => {

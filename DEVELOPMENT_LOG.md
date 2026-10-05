@@ -175,3 +175,89 @@ After fixes, same real camera + real GPU (diag-real-camera.mjs):
 
 Gates after fixes: tsc ✓, lint ✓, 238 unit tests ✓, build ✓, 9/9 E2E ✓
 (real-verification vision spec now also asserts a delegate + benchmark exist).
+
+## Phase 13 — Usable local release and lifecycle hardening (2026-10-05)
+
+User request: make the app usable in normal real-world operation. Work is local
+only; Karplus–Strong synthesis, worker inference, the startup delegate benchmark
+and the one-second frame watchdog remain intact.
+
+Changes:
+- Camera capture now owns a separate video element outside React. Each screen
+  binds only its visible preview, so calibration → performance, display-mode
+  switching and results → re-record preserve live video and inference.
+  Calibration preview also reattaches after React StrictMode effect replay;
+  browser regression checks the live preview both before and after calibration.
+- VisionSession owns startup immediately. Back/exit cancels worker initialization
+  and releases late camera permission results; startup failures release tracks.
+  Explicit inference error responses also schedule another frame (the watchdog
+  alone could not recover once the error handler cleared the busy flag).
+- Keyboard and vision performance controls are enabled only on the performance
+  screen, preventing setup/calibration/results from starting hidden recordings.
+- Microphone requests and worklet setup are scoped to the current take. Stop/exit
+  invalidates pending work, releases late tracks, and disposes stale captures.
+  Duplicate recording starts and starts during export are ignored. Disposed
+  controllers cannot navigate to results or create export URLs after export.
+- The PCM worklet uses Vite's compiled worker URL in production. Its output is
+  connected to the audio destination to keep processing active, but contains only
+  silence: microphone samples are never copied to speaker output.
+- Recording includes a snapshot of an already selected chord/mute. Microphone
+  capture startup offset is retained and applied when mixing, preventing delayed
+  authorization from moving the vocal track to the start of the guitar track.
+- Song progression input keeps its own draft (typed spaces previously disappeared
+  immediately). Invalid/empty progressions block entry; incompatible meter/pattern
+  settings fall back to down-beats. Stored keys, custom chords and calibration
+  data are validated before reaching the realtime modules.
+- Added setup and live strum sensitivity, a Chinese gesture-to-current-chord guide,
+  configured keyboard entry from setup, microphone readiness feedback, export and
+  recalibration guards, and responsive layout adjustments.
+- Start-Guitar.cmd / scripts/start-local.ps1 prepare dependencies, WASM patches and
+  the model, then open a local browser. README now documents actual usage.
+- Final review also found a retained analyser input: disconnecting the analyser's
+  output did not remove guitarBus → analyser. Meter teardown now removes that
+  specific input while preserving the master connection. Repeated take tests
+  count actual browser connections, not just component mounts.
+- Two-hand record toggles consult the controller's current recording state, so
+  button/keyboard/gesture controls stay synchronized. Disabling/resetting the
+  pipeline releases its active mute, preventing a muted engine after re-entry.
+  Guided recording restarts count-in even after metronome practice.
+
+Verification:
+- npm ci completed, including all three copied WASM loader patches.
+- Typecheck and lint passed; production build includes a compiled PCM worklet.
+- 252 unit/integration tests passed (27 files); new regressions cover microphone
+  races, stale export completion, initial chord/mute, vocal alignment, independent
+  camera capture, explicit inference errors, the one-second watchdog, analyser
+  inputs, actual recording toggle state, mute release and guided count-in reset.
+- Development browser suite: 16 passed; the opt-in soak is run separately.
+- Production preview suite: 13 passed (keyboard, recording cycles, camera preview,
+  mode switching, pending permissions, denial fallback and actual downloads).
+  Vocal WAV downloaded and checked for non-silent PCM; initial G chord verified
+  in the downloaded JSON. No dev introspection hook is required for these tests.
+- Headed Chromium with the real webcam/GPU: startup GPU benchmark 4.87 ms;
+  inference samples 9.7, 7.6, 7.1, 7.1, 6.7, 7.4 ms; FPS 24, 24, 23, 29, 29, 30.
+- Full ten-minute debug-mode soak: PASSED, 600 wall-clock seconds of performance,
+  19 recording/export cycles, zero page errors; uses real browser audio,
+  MediaPipe model/WASM/worker, fake camera/microphone sources, repeated recording
+  and local WAV export. Its duration is wall-clock time, not a mocked clock.
+  An initial run reached 508 seconds / 16 recordings with zero page errors, then
+  was deliberately stopped for the analyser/toggle fixes discovered in review.
+  The final run additionally asserts one analyser input during performance, zero
+  on results, microphone tracks ended after each take, and all tracks ended on exit.
+  All those resource assertions passed; the full test finished in 10.1 minutes.
+- Procedural performance benchmark: vision detector chain 0.0084 ms/frame;
+  bus-to-six-voice scheduling 0.0099 ms; cold KS synthesis median 4.63 ms.
+
+Environment notes:
+- Windows sandbox sessions used different AppData browser caches. Test tooling
+  supports a workspace .cache/ms-playwright directory and workspace downloads.
+- Restricted Chromium downloads were cancelled by the sandbox; the identical
+  download test passed when run in the host environment. Browser suites and the
+  soak were therefore run there, against local servers only.
+- An explicitly managed local server (GGW_EXTERNAL_SERVER=1) avoided restricted
+  Windows child-process teardown hanging the test runner. Default tests still
+  require their own server; production checks use port 5174 independently.
+
+Remaining limitation: real-hand gesture accuracy across users, poses and lighting
+has not been systematically measured. The real-device diagnostic measures the
+camera/inference pipeline; it does not prove recognition accuracy on a human.

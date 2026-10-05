@@ -63,7 +63,8 @@ export class ControlGestureRecognizer {
   private _nextPauseAction: ControlAction = "pause";
   private _lastT = 0;
 
-  constructor(combos: ControlCombo[] = DEFAULT_CONTROL_COMBOS) {
+  constructor(combos: ControlCombo[] = DEFAULT_CONTROL_COMBOS,
+    private readonly isRecording?: () => boolean) {
     this.combos = combos;
   }
 
@@ -183,6 +184,7 @@ export class ControlGestureRecognizer {
     action: ControlAction | "toggle-record" | "toggle-pause",
   ): ControlAction {
     if (action === "toggle-record") {
+      if (this.isRecording) return this.isRecording() ? "record-stop" : "record-start";
       return this._nextRecordAction;
     }
     if (action === "toggle-pause") {

@@ -6,6 +6,18 @@ import type { GestureCandidate, GestureId } from "./gestureTypes";
 
 const STEP = 1 / 30;
 
+it("record gesture follows the actual UI/keyboard state instead of its private toggle", () => {
+  let recording = true;
+  const recognizer = new ControlGestureRecognizer(undefined, () => recording);
+  const ok = makeCandidate(OK_GESTURE);
+  recognizer.update(ok, ok, 0);
+  expect(recognizer.update(ok, ok, 1.6)?.action).toBe("record-stop");
+  recording = false;
+  recognizer.update(null, null, 1.7);
+  recognizer.update(ok, ok, 2.3);
+  expect(recognizer.update(ok, ok, 3.9)?.action).toBe("record-start");
+});
+
 function makeCandidate(gestureId: GestureId, confidence = 0.9): GestureCandidate {
   return { gestureId, confidence };
 }

@@ -8,7 +8,7 @@ export class LevelMeter {
   private peakHold = 0;
   private peakHoldUntil = 0;
 
-  constructor(ctx: BaseAudioContext, source: AudioNode) {
+  constructor(ctx: BaseAudioContext, private readonly source: AudioNode) {
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 1024;
     this.buffer = new Float32Array(this.analyser.fftSize);
@@ -38,6 +38,7 @@ export class LevelMeter {
   }
 
   disconnect(): void {
+    this.source.disconnect(this.analyser);
     this.analyser.disconnect();
   }
 }

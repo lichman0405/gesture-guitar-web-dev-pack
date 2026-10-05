@@ -108,6 +108,18 @@ describe("PerformanceController keyboard path (acceptance B)", () => {
     controller.dispose();
   });
 
+  it("guided recording restarts count-in after practicing with a running metronome", async () => {
+    const { controller, fakeCtx } = makeController();
+    await controller.startAudio({ ...DEFAULT_SETTINGS, mode: "guided" });
+    controller.startMetronome();
+    fakeCtx.currentTime = 7;
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(controller.store.getSnapshot().beatPulse?.seq).toBeGreaterThan(0);
+    controller.startRecording();
+    expect(controller.store.getSnapshot().beatPulse).toMatchObject({ seq: 0, inCountIn: true });
+    controller.dispose();
+  });
+
   it("custom chord mapping resolves slots", async () => {
     const { controller } = makeController();
     await controller.startAudio({

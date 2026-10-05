@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VisionSession } from "../../app/visionSession";
 import { CameraView } from "../camera/CameraView";
+import { DEFAULT_CALIBRATION } from "../../motion/calibrationTypes";
 
 interface CalibrateScreenProps {
   session: VisionSession;
@@ -49,6 +50,11 @@ export function CalibrateScreen({
   const [failureReason, setFailureReason] = useState<string | null>(null);
   const [visionError, setVisionError] = useState<string | null>(null);
   const startedRef = useRef(false);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const beginCalibration = useCallback(() => {
     setFailureReason(null);
@@ -60,9 +66,12 @@ export function CalibrateScreen({
   // Start the camera once the video element is mounted.
   const handleVideoReady = useCallback(
     (el: HTMLVideoElement | null) => {
-      if (!el || startedRef.current) return;
+      if (!el) { session.setPreview(null); return; }
+      session.setPreview(el); // Reattach after React StrictMode's effect replay.
+      if (startedRef.current) return;
       startedRef.current = true;
       void session.start(el).then(() => {
+        if (!mountedRef.current) return;
         if (session.currentState !== "running") {
           setPhase("camera-error");
           setVisionError(visionErrorMessage(session));
@@ -135,7 +144,10 @@ export function CalibrateScreen({
           <p role="alert">{failureReason}</p>
           <div className="row">
             <button onClick={beginCalibration}>Retry calibration</button>
-            <button onClick={onComplete}>Use defaults &amp; continue</button>
+            <button onClick={() => {
+              session.pipeline.setCalibration({ ...DEFAULT_CALIBRATION, sensitivity });
+              onComplete();
+            }}>Use defaults &amp; continue</button>
             <button onClick={onSkipCamera}>Continue without camera</button>
           </div>
         </div>

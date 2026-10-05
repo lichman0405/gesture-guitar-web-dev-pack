@@ -42,6 +42,7 @@ export interface VisionPipelineOptions {
   debounceConfig?: DebounceConfig;
   /** Maps a gesture slot to a chord symbol (settings-driven); null = unassigned. */
   resolveSlotChord: (slotId: string) => string | null;
+  isRecording?: () => boolean;
   onCalibrationComplete?: (calibration: CalibrationData) => void;
   onCalibrationFailed?: (reason: string) => void;
 }
@@ -74,9 +75,10 @@ export class VisionPipeline {
   private readonly debouncer: GestureDebouncer;
   private readonly strumDetector: StrumDetector;
   private readonly muteDetector = new MuteDetector();
-  private readonly controlRecognizer = new ControlGestureRecognizer();
+  private readonly controlRecognizer: ControlGestureRecognizer;
   private _calibrator: Calibrator;
   private pendingCalibrationStart = false;
+  private enabled = true;
 
   private lastChordEventChord: string | null = null;
 
@@ -91,6 +93,7 @@ export class VisionPipeline {
     this.bus = bus;
     this.options = options;
     this.handedness = options.handedness;
+    this.controlRecognizer = new ControlGestureRecognizer(undefined, options.isRecording);
     this.debouncer = new GestureDebouncer(options.debounceConfig ?? DEFAULT_DEBOUNCE_CONFIG);
     this.strumDetector = new StrumDetector(this.calibration, {
       muted: () => this.muteDetector.active,
@@ -105,6 +108,12 @@ export class VisionPipeline {
 
   setHandedness(handedness: Handedness): void {
     this.handedness = handedness;
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    this.reset();
   }
 
   setCalibration(calibration: CalibrationData): void {
@@ -161,6 +170,8 @@ export class VisionPipeline {
       }
       return;
     }
+
+    if (!this.enabled) return;
 
     let chordHand: NormalizedHand | null = null;
     let perfHand: NormalizedHand | null = null;
@@ -247,6 +258,12 @@ export class VisionPipeline {
   }
 
   reset(): void {
+    // Releasing/resetting the detector must release the corresponding audio mute.
+    if (this.muteDetector.active) {
+      this.bus.publish({ type: "mute", t: this.bus.now(), active: false, source: "vision" });
+    }
+    this.pendingCalibrationStart = false;
+    this._calibrator.reset();
     this.debouncer.reset();
     this.strumDetector.reset();
     this.muteDetector.reset();

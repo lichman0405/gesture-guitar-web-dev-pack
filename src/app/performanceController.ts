@@ -54,6 +54,7 @@ export interface UiState {
   lastControl: string | null;
   guided: GuidedUiState | null;
   micError: string | null;
+  micStatus: "idle" | "requesting" | "recording" | "unavailable";
   exportState: "idle" | "exporting" | "done" | "failed";
   results: ResultsSummary | null;
 }
@@ -71,6 +72,7 @@ const INITIAL_UI_STATE: UiState = {
   lastControl: null,
   guided: null,
   micError: null,
+  micStatus: "idle",
   exportState: "idle",
   results: null,
 };
@@ -108,6 +110,11 @@ export class PerformanceController {
   private micStream: MediaStream | null = null;
   private exportUrls = new Map<string, string>();
   private wasRunningBeforePause = false;
+  private micGeneration = 0;
+  private micStartOffset = 0;
+  private disposed = false;
+  private lastChordEvent: ChordEvent | null = null;
+  private lastMuteEvent: MuteEvent | null = null;
 
   constructor(options: PerformanceControllerOptions = {}) {
     this.options = options;
@@ -287,6 +294,7 @@ export class PerformanceController {
   }
 
   startRecording(settings?: SessionSettings): void {
+    if (this.disposed || this.recorder.isRecording || this.store.getSnapshot().exportState === "exporting") return;
     const sessionSettings: SessionSettings =
       settings ??
       (this.settings
@@ -310,42 +318,64 @@ export class PerformanceController {
             chordMappingMode: "scale",
           });
     this.recorder.start(sessionSettings);
+    const startedAt = this.bus.now();
+    // Snapshot the chord/mute already selected before pressing Record.
+    if (this.lastChordEvent) this.bus.publish({ ...this.lastChordEvent, t: startedAt });
+    if (this.lastMuteEvent?.active) this.bus.publish({ ...this.lastMuteEvent, t: startedAt });
     this.store.set({
       recording: true,
       recordStartWallTime: Date.now(),
       micError: null,
+      micStatus: "requesting",
       exportState: "idle",
       results: null,
     });
 
     // Guided/song recordings align to the transport (count-in included).
-    if (this.guidedPlan && !this.transport?.running) {
+    if (this.guidedPlan) {
+      this.stopMetronome();
       this.startMetronome();
     }
     this.recordingGrid = this.transport?.grid ?? this.grid;
 
     // Vocal capture is best-effort: mic denial never blocks guitar (§L).
-    void this.startMicCapture();
+    void this.startMicCapture(startedAt, ++this.micGeneration);
   }
 
-  private async startMicCapture(): Promise<void> {
-    if (!this.graph) return;
+  private async startMicCapture(startedAt: number, generation: number): Promise<void> {
+    const graph = this.graph;
+    if (!graph) return;
+    const isCurrent = () => !this.disposed && this.recorder.isRecording && this.micGeneration === generation;
     const { stream, error } = await requestMicrophone();
     if (!stream) {
-      if (this.recorder.isRecording) {
-        this.store.set({ micError: error ?? "Microphone unavailable" });
+      if (isCurrent()) {
+        this.store.set({ micStatus: "unavailable", micError: error ?? "Microphone unavailable" });
       }
       return;
     }
+    if (!isCurrent()) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    this.micStream = stream; // Own the track while the worklet is still loading.
+    const capture = new MicCapture();
     try {
-      const capture = new MicCapture();
-      await capture.start(this.graph.ctx, stream);
+      await capture.start(graph.ctx, stream);
+      if (!isCurrent()) {
+        capture.dispose();
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       this.micCapture = capture;
-      this.micStream = stream;
+      this.micStartOffset = Math.max(0, this.bus.now() - startedAt);
+      this.store.set({ micStatus: "recording" });
     } catch (err) {
+      capture.dispose();
       stream.getTracks().forEach((t) => t.stop());
-      if (this.recorder.isRecording) {
+      if (isCurrent()) {
+        this.micStream = null;
         this.store.set({
+          micStatus: "unavailable",
           micError: err instanceof Error ? err.message : "Microphone capture failed",
         });
       }
@@ -353,6 +383,7 @@ export class PerformanceController {
   }
 
   private stopMicCapture(): VocalCapture | null {
+    ++this.micGeneration;
     const capture = this.micCapture;
     this.micCapture = null;
     if (this.micStream) {
@@ -360,13 +391,14 @@ export class PerformanceController {
       this.micStream = null;
     }
     if (!capture || !capture.isCapturing) return null;
-    return capture.stop();
+    return { ...capture.stop(), startOffsetSeconds: this.micStartOffset };
   }
 
   stopRecording(): RecordedSession | null {
     const session = this.recorder.stop();
     const vocal = this.stopMicCapture();
-    this.store.set({ recording: false, recordStartWallTime: null });
+    this.store.set({ recording: false, recordStartWallTime: null, micStatus: "idle" });
+    if (session) this.stopMetronome();
     if (session) {
       const evaluation = this.evaluateIfGuided(session);
       this.options.onSessionRecorded?.(session);
@@ -406,6 +438,7 @@ export class PerformanceController {
     this.revokeExportUrls();
     try {
       const result = await exportSession(session, { vocal: vocal ?? undefined });
+      if (this.disposed) return;
       if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
         for (const artifact of result.artifacts) {
           this.exportUrls.set(artifact.kind, URL.createObjectURL(artifact.blob));
@@ -422,6 +455,7 @@ export class PerformanceController {
       });
       this.options.onResultsReady?.();
     } catch (err) {
+      if (this.disposed) return;
       // exportSession isolates per-track failures; this is the catastrophic path.
       this.store.set({
         exportState: "failed",
@@ -471,6 +505,7 @@ export class PerformanceController {
   }
 
   private handleChord(event: ChordEvent): void {
+    this.lastChordEvent = event;
     this.engine?.setChord(event.chord);
     this.store.set({ chord: event.chord, chordSlot: event.slot ?? null });
   }
@@ -487,6 +522,7 @@ export class PerformanceController {
   }
 
   private handleMute(event: MuteEvent): void {
+    this.lastMuteEvent = event;
     this.engine?.setMuted(event.active);
     this.store.set({ muteActive: event.active });
   }
@@ -525,6 +561,8 @@ export class PerformanceController {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.recorder.stop();
     this.stopMetronome();
     this.stopMicCapture();
     this.revokeExportUrls();

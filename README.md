@@ -1,50 +1,83 @@
-# Gesture Guitar Web — Autonomous Development Base Pack
+# Gesture Guitar · 手势吉他
 
-A Windows-first, local-only development specification for an autonomous Claude Code workflow using DeepSeek-Flash.
+在 Chrome / Edge 里用摄像头识别手势弹吉他，也能直接用键盘演奏。
+音色使用程序化 Karplus–Strong 合成。摄像头、麦克风、录音与导出都在本机处理，无需账号或后端。
 
-## Product in one sentence
+## Windows 启动
 
-A browser-based "air guitar" application that tracks only the user's hands through a webcam, maps the chord-hand gesture to chords, maps the performance-hand motion to guitar strums, records singing through the microphone, and exports vocal, guitar, mixed audio, and structured performance data.
+安装 Node.js 后，双击仓库根目录的 **Start-Guitar.cmd**。
+脚本会准备缺失依赖、应用 MediaPipe WASM 补丁、检查手部模型，然后打开浏览器。
+保持终端窗口打开，用 Ctrl+C 停止服务。若 5173 已占用，Vite 会选择空闲端口，请使用自动打开的地址。
 
-## Hard project constraints
+也可以在仓库目录运行：
 
-- Development environment: Windows.
-- Main target: desktop Chrome / Edge.
-- No backend required for MVP.
-- No account system.
-- No cloud inference.
-- Camera and microphone data stay local by default.
-- Claude Code is the only development harness.
-- Claude Code is connected to DeepSeek-Flash.
-- Claude Code may use parallel subagents internally.
-- The Supervisor owns the complete task context and DAG.
-- Subagents receive only the minimum context needed for their tasks.
-- Git is local-only.
-- Local commits are required.
-- Never create a remote, push, open a PR, or depend on GitHub.
-- Missing guitar samples are NEVER a blocker.
-- A playable procedural guitar synth is the mandatory fallback.
-- No human confirmation is required between phases.
-- Continue autonomously until all acceptance criteria pass or a genuinely impossible external hardware/browser condition prevents execution.
+```powershell
+npm ci
+npm run dev
+```
 
-## Recommended first command
+打开终端显示的地址，通常是 http://localhost:5173。使用本地地址以满足摄像头和麦克风的安全上下文要求。
 
-Open this directory in Claude Code and paste the full contents of:
+## 摄像头演奏
 
-`CLAUDE_CODE_GOAL_PROMPT.md`
+1. 点击 Start，选择惯用手、模式、调性、节拍和音色，点击 Continue。
+2. 允许摄像头，手心朝镜头，双手保持在画面里，静止约 2.5 秒完成校准。尽量使用均匀的正面光照。
+3. 默认右手模式：**左手选和弦，右手上下扫弦**；左手模式则相反。预览是镜像，左右手指的是你自己的身体。
+4. 和弦手势保持约 0.2 秒；扫弦手上下穿过预览中的绿色区域。握拳保持一会儿可闷音，松开解除。
+5. 扫弦漏触发可提高「扫弦灵敏度」；静止时误触发可降低。改变坐姿、距离或光照后点击 Recalibrate。
 
-## Documentation map
+默认 C 大调：
 
-- `docs/PRODUCT_SPEC.md` — behavior and user-facing scope
-- `docs/ARCHITECTURE.md` — runtime architecture and module boundaries
-- `docs/GESTURE_SPEC.md` — hand roles, gesture mapping, debounce, strum detection
-- `docs/AUDIO_ENGINE.md` — guitar synthesis, timing, metronome, routing
-- `docs/RECORDING_EXPORT.md` — vocal/guitar/mix recording and exports
-- `docs/UX_FLOW.md` — screens and interaction states
-- `docs/WINDOWS_SETUP.md` — Windows-first implementation constraints
-- `docs/AUTONOMOUS_DEV_PROTOCOL.md` — Supervisor/subagent operating rules
-- `docs/TASK_DAG.md` — execution phases, dependencies and parallelism
-- `docs/ACCEPTANCE_TESTS.md` — testable Definition of Done
-- `docs/DECISIONS.md` — frozen decisions made during discovery
-- `schemas/performance.schema.json` — performance event export contract
-- `scripts/bootstrap.ps1` — suggested local project bootstrap
+| 和弦手姿势 | 和弦 | 键盘 |
+|---|---|---|
+| 食指 | C | 1 |
+| 食指＋中指 | Dm | 2 |
+| 食指＋中指＋无名指 | Em | 3 |
+| 四指伸直、拇指收起 | F | 4 |
+| 五指张开 | G | 5 |
+| 竖起拇指 | Am | 6 |
+
+演奏页「手势怎么弹」显示当前调性或自定义映射的实际和弦。
+Normal 显示预览与帮助，Performance 显示大号和弦，Debug 显示 FPS、推理耗时和委托选择。
+
+## 键盘演奏
+
+首页点击 Demo / Keyboard Mode；需要自定义设置时，Settings → Play with keyboard。
+
+- 1–6 选和弦；C、D、E、F、G、A、B 直接选和弦，Shift＋字母选小和弦。
+- ↓ / ↑ 扫弦；Shift＋方向键重扫，Ctrl＋方向键轻扫。
+- Space 切换闷音；R 开始/停止录音；P 切换节拍暂停；Esc 停止录音。
+
+## 录音与导出
+
+点击 Record 并允许麦克风。看到 **Microphone recording** 后再开始唱；授权期间也可以弹吉他。
+人声不会从扬声器实时回放，避免啸叫。拒绝麦克风仍可录制吉他。
+
+点击 Stop 后等待本地渲染，在结果页播放混音，下载 Vocal / Guitar / Mix WAV 和 Performance JSON。
+麦克风授权延迟会计入混音对齐，录音开始前已选好的和弦也会进入导出。
+录音或导出期间禁止重新校准；导出完成后可以 Re-record，Exit session 会释放设备。
+
+## 验证与开发
+
+```powershell
+npm run typecheck
+npm run lint
+npx vitest run
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm run test:soak
+```
+
+test:soak 运行完整 10 分钟，不缩短时间。
+在 Windows 受限环境中，可以把测试浏览器安装到工作区：
+
+```powershell
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD/.cache/ms-playwright"
+npx playwright install chromium
+```
+
+生产构建流程检查：`$env:GGW_PREVIEW='1'; npx playwright test e2e/usability.spec.ts`。
+本地 Git 仅提交，禁止 remote、push、GitHub 仓库或 PR。
+完整记录见 DEVELOPMENT_LOG.md，验收标准见 docs/ACCEPTANCE_TESTS.md。
+自动测试的摄像头图像和麦克风信号由 Chromium 提供；真实人手、真实光照下的准确率仍需要真人体验验证。

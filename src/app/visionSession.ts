@@ -14,6 +14,7 @@ export interface VisionSessionOptions {
   bus: EventBus;
   handedness: Handedness;
   resolveSlotChord: (slotId: string) => string | null;
+  isRecording?: () => boolean;
   adaptive?: boolean;
   onStateChange?: (state: VisionSessionState) => void;
   onError?: (error: VisionClientError) => void;
@@ -27,12 +28,21 @@ const CALIBRATION_STORAGE_KEY = "ggw.calibration.v1";
 function isCalibrationData(value: unknown): value is CalibrationData {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
+  const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+  const point = (p: unknown) => p === null || (typeof p === "object" && p !== null &&
+    finite((p as Record<string, unknown>).x) && finite((p as Record<string, unknown>).y) &&
+    finite((p as Record<string, unknown>).z));
+  const corridor = v.strumCorridor as Record<string, unknown> | null | undefined;
   return (
-    typeof v.handScale === "number" &&
-    v.handScale > 0 &&
-    typeof v.noiseFloor === "number" &&
-    typeof v.strumCorridor === "object" &&
-    v.strumCorridor !== null
+    v.version === 1 && typeof v.calibratedAt === "string" &&
+    finite(v.handScale) && v.handScale > 0 && v.handScale <= 2 &&
+    finite(v.noiseFloor) && v.noiseFloor >= 0 &&
+    finite(v.sensitivity) && v.sensitivity >= 0.25 && v.sensitivity <= 3 &&
+    point(v.chordHandNeutral) && point(v.performanceHandNeutral) &&
+    typeof corridor === "object" && corridor !== null && corridor !== undefined &&
+    finite(corridor.topY) && finite(corridor.bottomY) && finite(corridor.neutralY) &&
+    corridor.topY >= 0 && corridor.bottomY <= 1 &&
+    corridor.topY < corridor.neutralY && corridor.neutralY < corridor.bottomY
   );
 }
 
@@ -68,6 +78,7 @@ export class VisionSession {
     this.pipeline = new VisionPipeline(options.bus, {
       handedness: options.handedness,
       resolveSlotChord: options.resolveSlotChord,
+      isRecording: options.isRecording,
       onCalibrationComplete: (calibration) => {
         storeCalibration(calibration);
         options.onCalibrationComplete?.(calibration);
@@ -78,6 +89,7 @@ export class VisionSession {
     if (stored) {
       this.pipeline.setCalibration(stored);
     }
+    this.pipeline.setEnabled(false);
   }
 
   get currentState(): VisionSessionState {
@@ -102,6 +114,10 @@ export class VisionSession {
     this.pipeline.setHandedness(handedness);
   }
 
+  setPreview(el: HTMLVideoElement | null): void {
+    this.client?.setPreview(el);
+  }
+
   private setState(state: VisionSessionState): void {
     this.state = state;
     this.options.onStateChange?.(state);
@@ -115,19 +131,23 @@ export class VisionSession {
     const client = new VisionClient({
       adaptive: this.options.adaptive ?? true,
       onFrame: (frame) => {
+        if (this.client !== client) return;
         this.latestFrame = frame;
         this.pipeline.handleFrame(frame);
       },
       onError: (error) => {
+        if (this.client !== client) return;
         this.lastError = error;
         this.options.onError?.(error);
         if (this.state !== "running") this.setState("error");
       },
       onTierChange: (tier) => this.options.onTierChange?.(tier),
     });
+    this.client = client; // stop() must also own an in-flight startup.
     try {
       await client.start(videoEl);
     } catch (err) {
+      if (this.client !== client) return;
       this.client = null;
       this.lastError ??= {
         kind: "unsupported",
@@ -136,7 +156,7 @@ export class VisionSession {
       this.setState("error");
       return;
     }
-    this.client = client;
+    if (this.client !== client) return;
     this.setState("running");
   }
 

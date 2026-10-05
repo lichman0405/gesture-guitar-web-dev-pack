@@ -1,4 +1,5 @@
 import type { VocalCapture } from "./types";
+import pcmWorkletUrl from "./pcmCaptureWorklet.ts?worker&url";
 
 export interface MicRequestResult {
   stream: MediaStream | null;
@@ -39,7 +40,7 @@ export class MicCapture {
     this.ctx = ctx;
     this.chunks = [];
 
-    await ctx.audioWorklet.addModule(new URL("./pcmCaptureWorklet.ts", import.meta.url));
+    await ctx.audioWorklet.addModule(pcmWorkletUrl);
 
     this.sourceNode = new MediaStreamAudioSourceNode(ctx as AudioContext, { mediaStream: stream });
     this.workletNode = new AudioWorkletNode(ctx as AudioContext, "pcm-capture");
@@ -50,6 +51,8 @@ export class MicCapture {
     };
 
     this.sourceNode.connect(this.workletNode);
+    // The processor emits silence; connect its output so browsers pull input.
+    this.workletNode.connect((ctx as AudioContext).destination);
     this.capturing = true;
   }
 

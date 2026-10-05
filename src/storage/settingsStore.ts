@@ -4,6 +4,8 @@
 
 import type { KeyValueAdapter } from "./adapters";
 import { LocalStorageAdapter } from "./adapters";
+import { MAJOR_KEYS, normalizeChordSymbol } from "../music/theory";
+import { getPatternForMeter } from "../guided/patterns";
 
 /** User-configurable application settings. */
 export interface AppSettings {
@@ -88,7 +90,10 @@ function sanitize(raw: unknown): AppSettings {
   }
 
   if (p.key === null || typeof p.key === "string") {
-    merged.key = p.key;
+    try {
+      const key = normalizeChordSymbol(p.key ?? "C");
+      if (MAJOR_KEYS.includes(key)) merged.key = key;
+    } catch { /* Keep a playable default for corrupt persisted keys. */ }
   }
 
   if (
@@ -101,7 +106,11 @@ function sanitize(raw: unknown): AppSettings {
   }
 
   if (isObject(p.customMapping)) {
-    merged.customMapping = p.customMapping as Record<string, string>;
+    merged.customMapping = {};
+    for (const [slot, chord] of Object.entries(p.customMapping)) {
+      if (!/^slot-[1-6]$/.test(slot) || typeof chord !== "string" || !chord) continue;
+      try { merged.customMapping[slot] = normalizeChordSymbol(chord); } catch { /* Ignore invalid chords. */ }
+    }
   }
 
   if (typeof p.bpm === "number" && !Number.isNaN(p.bpm)) {
@@ -138,9 +147,13 @@ function sanitize(raw: unknown): AppSettings {
   if (
     Array.isArray(p.songProgression) &&
     p.songProgression.every((c) => typeof c === "string") &&
-    p.songProgression.length > 0
+    p.songProgression.length <= 128
   ) {
     merged.songProgression = p.songProgression as string[];
+  }
+
+  if (!getPatternForMeter(merged.guidedPatternId, merged.timeSignature)) {
+    merged.guidedPatternId = "down-beats";
   }
 
   return merged;
@@ -171,7 +184,7 @@ export class SettingsStore {
    * the result.
    */
   update(patch: Partial<AppSettings>): AppSettings {
-    const next = { ...this.load(), ...patch };
+    const next = sanitize({ ...this.load(), ...patch });
     this.save(next);
     return next;
   }

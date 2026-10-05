@@ -125,6 +125,11 @@ Debug mode:
 - camera track is released when app stops using it;
 - microphone track is released when app stops using it.
 
+Automated full-duration check: `npm run test:soak` runs at least ten wall-clock
+minutes with the real model/WASM/worker and browser audio in Debug mode, repeated
+recordings and WAV exports. Camera images and microphone input use Chromium fake
+devices; real-hand accuracy and light-dependent behavior still require a person.
+
 ## O. Final local-only Git state
 
 - working tree clean after final commit;

@@ -1,4 +1,6 @@
 import { MAJOR_KEYS, CHORD_VOCABULARY } from "../../music/theory";
+import { normalizeChordSymbol } from "../../music/theory";
+import { useState } from "react";
 import { INSTRUMENT_PRESETS } from "../../music/engine/InstrumentPreset";
 import { STRUM_PATTERNS } from "../../guided/patterns";
 import type { AppSettings } from "../../storage/settingsStore";
@@ -9,6 +11,7 @@ interface Props {
   onChange: (patch: Partial<AppSettings>) => void;
   onContinue: () => void;
   onBack: () => void;
+  onKeyboardMode?: () => void;
 }
 
 const MODES: { id: PlayMode; label: string }[] = [
@@ -19,7 +22,12 @@ const MODES: { id: PlayMode; label: string }[] = [
 
 const TIME_SIGNATURES: TimeSignature[] = ["4/4", "3/4", "6/8"];
 
-export function SetupScreen({ settings, onChange, onContinue, onBack }: Props) {
+export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboardMode }: Props) {
+  const [progressionDraft, setProgressionDraft] = useState(settings.songProgression.join(" "));
+  const invalidSong = settings.mode === "song" && (settings.songProgression.length === 0 ||
+    settings.songProgression.some((chord) => {
+      try { normalizeChordSymbol(chord); return false; } catch { return true; }
+    }));
   return (
     <main className="screen setup">
       <h2>Setup</h2>
@@ -76,21 +84,21 @@ export function SetupScreen({ settings, onChange, onContinue, onBack }: Props) {
           <input
             id="progression"
             type="text"
-            value={settings.songProgression.join(" ")}
-            onChange={(e) =>
+            value={progressionDraft}
+            onChange={(e) => {
+              setProgressionDraft(e.target.value);
               onChange({
                 songProgression: e.target.value
                   .split(/[\s,]+/)
                   .map((c) => c.trim())
                   .filter((c) => c.length > 0),
-              })
-            }
+              });
+            }}
             placeholder="e.g. C G Am F"
           />
-          {settings.songProgression.some((c) => !CHORD_VOCABULARY.includes(c)) && (
+          {invalidSong && (
             <p className="field-warning" role="alert">
-              Some chords are outside the 24-chord vocabulary and cannot be triggered by
-              gestures.
+              Enter at least one valid major or minor chord, for example C G Am F.
             </p>
           )}
         </section>
@@ -203,6 +211,13 @@ export function SetupScreen({ settings, onChange, onContinue, onBack }: Props) {
       </section>
 
       <section className="field">
+        <label htmlFor="sensitivity">Strum sensitivity: {settings.sensitivity.toFixed(2)}</label>
+        <input id="sensitivity" type="range" min={0.25} max={3} step={0.25}
+          value={settings.sensitivity} onChange={(e) => onChange({ sensitivity: Number(e.target.value) })} />
+        <small>Increase if light strokes are missed; decrease if still hands trigger strums.</small>
+      </section>
+
+      <section className="field">
         <label htmlFor="preset">Instrument</label>
         <select
           id="preset"
@@ -218,8 +233,9 @@ export function SetupScreen({ settings, onChange, onContinue, onBack }: Props) {
       </section>
 
       <div className="actions">
+        {onKeyboardMode && <button disabled={invalidSong} onClick={onKeyboardMode}>Play with keyboard</button>}
         <button onClick={onBack}>Back</button>
-        <button className="primary" onClick={onContinue} data-testid="continue-button">
+        <button disabled={invalidSong} className="primary" onClick={onContinue} data-testid="continue-button">
           Continue
         </button>
       </div>

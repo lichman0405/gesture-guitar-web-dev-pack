@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PerformanceController } from "../../app/performanceController";
 import type { VisionSession } from "../../app/visionSession";
 import type { PipelineDebugStats } from "../../app/visionPipeline";
 import { useAppStore } from "../hooks";
 import { LevelMeter } from "../../audio/meters";
 import { CameraView } from "../camera/CameraView";
+import { GestureHelp } from "../GestureHelp";
 
 interface Props {
   controller: PerformanceController;
   visionSession?: VisionSession | null;
   onRecalibrate?: () => void;
   onExit: () => void;
+  handedness?: "right" | "left";
+  sensitivity?: number;
+  onSensitivityChange?: (sensitivity: number) => void;
 }
 
 /** rAF-polled level bar for one LevelMeter. */
@@ -50,7 +54,11 @@ const KEYBOARD_HINTS: [string, string][] = [
   ["Esc", "stop"],
 ];
 
-export function PerformScreen({ controller, visionSession, onRecalibrate, onExit }: Props) {
+export function PerformScreen({ controller, visionSession, onRecalibrate, onExit,
+  handedness = "right", sensitivity = 1, onSensitivityChange }: Props) {
+  const bindPreview = useCallback((el: HTMLVideoElement | null) => {
+    visionSession?.setPreview(el);
+  }, [visionSession]);
   const ui = useAppStore(controller.store);
   const [guitarMeter, setGuitarMeter] = useState<LevelMeter | null>(null);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -200,6 +208,7 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
         {visionSession && displayMode !== "performance" && (
           <section className="camera-panel" aria-label="Camera preview">
             <CameraView
+              onVideoReady={bindPreview}
               getFrame={() => visionSession.frame}
               getCorridor={() => visionSession.pipeline.getCalibration().strumCorridor}
               mirrored
@@ -243,10 +252,16 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
               )}
             </details>
             {onRecalibrate && (
-              <button className="link" onClick={onRecalibrate}>
+              <button disabled={ui.recording || ui.exportState === "exporting"} className="link" onClick={onRecalibrate}>
                 Recalibrate
               </button>
             )}
+            <GestureHelp controller={controller} handedness={handedness} />
+            {onSensitivityChange && <label className="field" htmlFor="live-sensitivity">
+              扫弦灵敏度：{sensitivity.toFixed(2)}
+              <input id="live-sensitivity" type="range" min={0.25} max={3} step={0.25}
+                value={sensitivity} onChange={(e) => onSensitivityChange(Number(e.target.value))} />
+            </label>}
           </section>
         )}
 
@@ -263,11 +278,19 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
               </button>
             </>
           ) : (
-            <button onClick={() => controller.startRecording()} data-testid="record-button">
+            <button disabled={ui.exportState === "exporting"} onClick={() => controller.startRecording()} data-testid="record-button">
               Record
             </button>
           )}
         </div>
+
+        {ui.recording && (
+          <p className="hint" role="status" data-testid="mic-status">
+            {ui.micStatus === "recording" ? "Microphone recording · voice stays off speakers" :
+              ui.micStatus === "requesting" ? "Allow microphone access to include your voice" :
+                "Guitar only · microphone unavailable"}
+          </p>
+        )}
 
         {displayMode !== "performance" && (
           <>

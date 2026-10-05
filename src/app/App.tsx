@@ -35,6 +35,10 @@ export function App() {
     const next = settingsStore.update(patch);
     controllerRef.current?.updateSettings(next);
     visionRef.current?.setHandedness(next.handedness);
+    if (visionRef.current && patch.sensitivity !== undefined) {
+      const pipeline = visionRef.current.pipeline;
+      pipeline.setCalibration({ ...pipeline.getCalibration(), sensitivity: next.sensitivity });
+    }
     setSettings(next);
   }, []);
 
@@ -51,7 +55,6 @@ export function App() {
           isRecording: () => controller.store.getSnapshot().recording,
         });
       }
-      keyboardRef.current.attach(window);
       return true;
     } catch (err) {
       setFatalError(
@@ -76,6 +79,7 @@ export function App() {
         bus: controller.bus,
         handedness: current.handedness,
         resolveSlotChord: (slot) => controller.resolveSlot(slot),
+        isRecording: () => controller.store.getSnapshot().recording,
       });
     }
     setScreen("calibrate");
@@ -106,11 +110,19 @@ export function App() {
     setScreen("landing");
   }, []);
 
-  // Detach keyboard when leaving perform screen via unmount.
+  // Only the performance screen may emit musical/recording controls.
   useEffect(() => {
+    visionRef.current?.pipeline.setEnabled(screen === "perform");
+    if (screen === "perform") keyboardRef.current?.attach(window);
+    else keyboardRef.current?.detach();
     return () => {
       keyboardRef.current?.detach();
     };
+  }, [screen]);
+
+  useEffect(() => () => {
+    visionRef.current?.stop();
+    controllerRef.current?.dispose();
   }, []);
 
   // Dev/test introspection hook: lets E2E verify the REAL audio graph,
@@ -160,6 +172,7 @@ export function App() {
           onChange={patchSettings}
           onContinue={() => void enterCameraFlow()}
           onBack={() => setScreen("landing")}
+          onKeyboardMode={() => void enterKeyboardMode()}
         />
       );
     case "calibrate":
@@ -186,6 +199,9 @@ export function App() {
           visionSession={visionRef.current}
           onRecalibrate={visionRef.current ? recalibrate : undefined}
           onExit={exitSession}
+          handedness={settings.handedness}
+          sensitivity={settings.sensitivity}
+          onSensitivityChange={(sensitivity) => patchSettings({ sensitivity })}
         />
       );
     case "results":

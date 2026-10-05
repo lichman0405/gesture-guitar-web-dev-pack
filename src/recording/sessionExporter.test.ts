@@ -25,6 +25,17 @@ function makeSession(events: RecordedSession["events"]): RecordedSession {
 }
 
 describe("exportSession", () => {
+  it("aligns late microphone PCM to session time in the mix", async () => {
+    const result = await exportSession(makeSession([]), {
+      vocal: { samples: new Float32Array([0.25, 0.25]), sampleRate: 8000, startOffsetSeconds: 0.001 },
+      guitarSampleRate: 8000,
+      renderGuitar: async () => ({ samples: new Float32Array(10), sampleRate: 8000 }),
+    });
+    const mix = result.artifacts.find((a) => a.kind === "mix-wav")!;
+    const view = new DataView(await mix.blob.arrayBuffer());
+    for (let frame = 0; frame < 8; frame++) expect(view.getInt16(44 + frame * 2, true)).toBe(0);
+    expect(view.getInt16(44 + 8 * 2, true)).toBeGreaterThan(8000);
+  });
   it("produces 4 artifacts with correct filenames and kinds", async () => {
     const session = makeSession([
       { type: "chord", t: 0, chord: "C", confidence: 1, source: "test" },
