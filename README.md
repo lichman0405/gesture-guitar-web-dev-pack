@@ -6,6 +6,16 @@
 
 ## 一、启动应用
 
+### 获取项目
+
+公开仓库：[lichman0405/gesture-guitar-web-dev-pack](https://github.com/lichman0405/gesture-guitar-web-dev-pack)。
+可在仓库页面下载 ZIP 并解压，也可以用 Git 克隆：
+
+```powershell
+git clone https://github.com/lichman0405/gesture-guitar-web-dev-pack.git
+cd gesture-guitar-web-dev-pack
+```
+
 ### Windows 双击启动
 
 1. 安装 Node.js 长期支持版，建议使用 22 或更新版本。
@@ -178,5 +188,5 @@ npx playwright install chromium
 摄像头诊断：`node scripts/diag-real-camera.mjs`；识别线程诊断：`node scripts/diag-vision.mjs`；扫弦逐帧追踪：`npx tsx scripts/debug-strum.ts`。
 实时摄像头、手势、音频和录音处理独立于 React 渲染循环。请保留识别线程看门狗、启动运算设备比较，以及安装后 WASM 补丁。
 
-项目仅使用本地 Git 提交，不配置远程仓库、不推送、不创建 GitHub 仓库或拉取请求。
+日常开发先在本地验证并提交；本项目已获得所有者明确授权，以公开仓库形式发布到 GitHub。
 完整开发记录见 [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)，验收标准见 [docs/ACCEPTANCE_TESTS.md](docs/ACCEPTANCE_TESTS.md)，任务图见 [docs/TASK_DAG.md](docs/TASK_DAG.md)。

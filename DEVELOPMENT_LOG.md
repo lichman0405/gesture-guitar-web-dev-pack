@@ -393,3 +393,13 @@ calibration, audio synthesis or recording lifecycle changes.
 14 项浏览器流程通过，开发专用手势注入测试按预期跳过。
 十分钟长测仍为显式启用，界面翻译未重复 Phase 13 的完整长测。
 中文启动脚本通过 PowerShell 语法解析检查。
+
+## Phase 17 — 授权公开发布到 GitHub（2026-10-05）
+
+用户明确要求创建 GitHub 项目并推送，随后确认使用公开仓库。
+该指令取代此前仅本地提交、不配置远程仓库的限制；其他技术约束保留。
+发布目标为 lichman0405/gesture-guitar-web-dev-pack，默认分支 main。
+README 增加公开仓库链接、克隆及下载说明，并更新发布约定。
+发布前确认工作区干净，检查受版本控制的文件及历史中常见凭据模式；
+依赖、构建、浏览器缓存、测试报告和录音导出目录均由 .gitignore 排除。
+本阶段仅修改文档及 Git 发布配置，沿用 Phase 16 已通过的验证结果。
