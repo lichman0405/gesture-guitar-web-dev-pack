@@ -100,9 +100,9 @@ export class KeyboardSimulator {
     const t = this.bus.now();
     const source = this.options.source;
 
-    const digitMatch = /^Digit([1-6])$/.exec(e.code);
+    const digitMatch = /^Digit([0-9])$/.exec(e.code);
     if (digitMatch) {
-      const slotId = `slot-${digitMatch[1]}`;
+      const slotId = `slot-${digitMatch[1] === "0" ? 10 : digitMatch[1]}`;
       const chord = this.options.resolveSlot?.(slotId);
       if (chord == null) return false;
       const event: ChordEvent = {

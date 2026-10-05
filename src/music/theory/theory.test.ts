@@ -201,6 +201,7 @@ describe("scaleModeMapping", () => {
       "slot-4",
       "slot-5",
       "slot-6",
+      "slot-7", "slot-8", "slot-9", "slot-10",
     ]);
   });
 
@@ -291,4 +292,10 @@ describe("getVoicing", () => {
     expect(() => getVoicingFrets("Cmaj7")).toThrow();
     expect(() => getVoicing("H")).toThrow();
   });
+});
+
+it("adds four distinct, transposed secondary/borrowed chords to the six original slots", () => {
+  expect(Object.values(scaleModeMapping("C"))).toEqual(["C", "Dm", "Em", "F", "G", "Am", "D", "E", "Cm", "A#"]);
+  expect(Object.values(scaleModeMapping("G"))).toEqual(["G", "Am", "Bm", "C", "D", "Em", "A", "B", "Gm", "F"]);
+  for (const key of MAJOR_KEYS) expect(new Set(Object.values(scaleModeMapping(key))).size).toBe(10);
 });

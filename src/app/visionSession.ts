@@ -7,6 +7,7 @@ import type { EventBus } from "../performance/eventBus";
 import type { Handedness } from "../performance/eventTypes";
 import type { CalibrationData } from "../motion/calibrationTypes";
 import { LocalStorageAdapter } from "../storage/adapters";
+import type { KeyValueAdapter } from "../storage/adapters";
 
 export type VisionSessionState = "idle" | "starting" | "running" | "error" | "stopped";
 
@@ -34,7 +35,7 @@ function isCalibrationData(value: unknown): value is CalibrationData {
     finite((p as Record<string, unknown>).z));
   const corridor = v.strumCorridor as Record<string, unknown> | null | undefined;
   return (
-    v.version === 1 && typeof v.calibratedAt === "string" &&
+    v.version === 1 && v.motionPoint === "knuckles" && typeof v.calibratedAt === "string" &&
     finite(v.handScale) && v.handScale > 0 && v.handScale <= 2 &&
     finite(v.noiseFloor) && v.noiseFloor >= 0 &&
     finite(v.sensitivity) && v.sensitivity >= 0.25 && v.sensitivity <= 3 &&
@@ -47,14 +48,14 @@ function isCalibrationData(value: unknown): value is CalibrationData {
 }
 
 /** Load a persisted calibration, or null when absent/invalid. */
-export function loadStoredCalibration(storage = new LocalStorageAdapter()): CalibrationData | null {
+export function loadStoredCalibration(storage: KeyValueAdapter = new LocalStorageAdapter()): CalibrationData | null {
   const parsed = storage.get<unknown>(CALIBRATION_STORAGE_KEY);
   return isCalibrationData(parsed) ? parsed : null;
 }
 
 export function storeCalibration(
   calibration: CalibrationData,
-  storage = new LocalStorageAdapter(),
+  storage: KeyValueAdapter = new LocalStorageAdapter(),
 ): void {
   storage.set(CALIBRATION_STORAGE_KEY, calibration);
 }

@@ -266,3 +266,9 @@ describe("createSessionStore (node fallback)", () => {
     expect(await store.list()).toHaveLength(0);
   });
 });
+
+it("persists all ten custom slots while ignoring unsupported slot IDs", () => {
+  const adapter = new MemoryAdapter();
+  adapter.set(SETTINGS_STORAGE_KEY, { customMapping: { "slot-7": "Bm", "slot-8": "F#m", "slot-9": "Db", "slot-10": "G#m", "slot-11": "C" } });
+  expect(new SettingsStore(adapter).load().customMapping).toEqual({ "slot-7": "Bm", "slot-8": "F#m", "slot-9": "C#", "slot-10": "G#m" });
+});

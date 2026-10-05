@@ -177,3 +177,81 @@ describe("VisionPipeline", () => {
     expect(events.filter((event) => event.type === "control")).toHaveLength(0);
   });
 });
+
+describe("two-hand playing regressions", () => {
+  it("commits all ten fixed gestures without letting the performance pose change the chord", () => {
+    const names = ["index", "index-middle", "index-middle-ring", "four-fingers", "open-palm", "thumbs-up", "pinky", "index-pinky", "thumb-index", "thumb-pinky"] as const;
+    const pipeline = makePipeline({ resolveSlotChord: (slot) => slot });
+    let t = 0;
+    names.forEach((name, index) => {
+      t = feedStatic(pipeline, t, 9, name, names[(index + 2) % names.length]);
+    });
+    expect(events.filter((e) => e.type === "chord").map((e) => e.type === "chord" ? e.slot : null))
+      .toEqual(names.map((_, i) => `slot-${i + 1}`));
+    expect(events.filter((e) => e.type === "strum")).toHaveLength(0);
+  });
+
+  it("does not stop while playing an open-palm chord with continuous open-hand strokes", () => {
+    const pipeline = makePipeline({ resolveSlotChord: () => "G" });
+    for (let i = 0; i <= 120; i++) {
+      pipeline.handleFrame(makeFrame(i * DT, [
+        buildGestureHand("open-palm", { physical: "Left", wrist: { x: 0.25, y: 0.6, z: 0 } }),
+        buildGestureHand("open-palm", { physical: "Right", wrist: { x: 0.75, y: 0.72 - 0.065 * Math.cos(2 * Math.PI * 2 * i * DT), z: 0 } }),
+      ]));
+    }
+    expect(events.filter((e) => e.type === "strum")).toHaveLength(16);
+    expect(events.filter((e) => e.type === "control")).toHaveLength(0);
+  });
+
+  it("plays wrist-pivot strokes while the wrist itself stays in one position", () => {
+    const pipeline = makePipeline();
+    const wrist = { x: 0.75, y: 0.55, z: 0 };
+    const right = buildGestureHand("thumb-index", { physical: "Right", wrist, scale: 0.18 });
+    for (let i = 0; i <= 90; i++) {
+      const angle = Math.PI / 2 + 0.45 * Math.cos(2 * Math.PI * 2 * i * DT);
+      const moving = { ...right, landmarks: right.landmarks.map((p) => ({
+        x: wrist.x + (p.x - wrist.x) * Math.cos(angle) - (p.y - wrist.y) * Math.sin(angle),
+        y: wrist.y + (p.x - wrist.x) * Math.sin(angle) + (p.y - wrist.y) * Math.cos(angle), z: p.z,
+      })) };
+      pipeline.handleFrame(makeFrame(i * DT, [buildGestureHand("index", { physical: "Left" }), moving]));
+    }
+    expect(events.filter((e) => e.type === "strum")).toHaveLength(12);
+  });
+
+  it("keeps left/right roles through brief model label errors while fingers change", () => {
+    const pipeline = makePipeline();
+    let t = 0;
+    for (let i = 0; i < 9; i++, t += DT) {
+      pipeline.handleFrame(makeFrame(t, [
+        buildGestureHand("index", { physical: "Left", wrist: { x: 0.3, y: 0.5, z: 0 } }),
+        buildGestureHand("open-palm", { physical: "Right", wrist: { x: 0.7, y: WRIST_REST_Y, z: 0 } }),
+      ]));
+    }
+    for (let i = 0; i < 9; i++) {
+      const chord = buildGestureHand("index-middle", { physical: "Left", wrist: { x: 0.3, y: 0.5, z: 0 } });
+      const perf = buildGestureHand("thumbs-up", { physical: "Right", wrist: { x: 0.7, y: WRIST_REST_Y, z: 0 } });
+      pipeline.handleFrame(makeFrame(t, i % 3 === 0 ? [{ ...perf, physical: "Left" }, { ...chord, physical: "Right" }] : [chord, perf]));
+      t += DT;
+    }
+    expect(events.filter((e) => e.type === "chord").map((e) => e.type === "chord" ? e.chord : null)).toEqual(["C", "Dm"]);
+  });
+});
+
+describe("pick grip vs mute", () => {
+  it("lets a closed pick grip play normally while keeping deliberate fist mute", () => {
+    const pipeline = makePipeline();
+    let t = feedStatic(pipeline, 0, 9, "index", "pick-grip");
+    for (let i = 0; i <= 20; i++, t += DT) {
+      pipeline.handleFrame(makeFrame(t, [
+        buildGestureHand("index", { physical: "Left" }),
+        buildGestureHand("pick-grip", { physical: "Right", wrist: { x: 0.5, y: 0.72 - 0.07 * Math.cos(Math.PI * i / 10), z: 0 } }),
+      ]));
+    }
+    expect(events.filter((e) => e.type === "mute")).toHaveLength(0);
+    const strums = events.filter((e) => e.type === "strum");
+    expect(strums).toHaveLength(2);
+    expect(strums.every((e) => e.type === "strum" && e.articulation === "normal")).toBe(true);
+    feedStatic(pipeline, t, 9, "index", "fist");
+    expect(events.filter((e) => e.type === "mute")).toMatchObject([{ active: true }]);
+  });
+});

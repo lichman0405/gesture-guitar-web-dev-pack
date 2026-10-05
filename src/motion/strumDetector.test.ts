@@ -150,7 +150,7 @@ describe("StrumDetector", () => {
     const detector = new StrumDetector(TEST_CALIBRATION);
     const trace: Array<{ y: number | null; t: number }> = [];
     // First half of a fast stroke (not enough displacement to fire on its own)
-    const first = generateLinearTrace(0.4, 0.5, 0.06);
+    const first = generateLinearTrace(0.4, 0.44, 0.06);
     for (const s of first) trace.push(s);
     // Null gap (10 frames) lets velocity decay and tracking abort
     const nullFrames = 10;
@@ -159,10 +159,10 @@ describe("StrumDetector", () => {
     }
     // Second half
     const lastT = first[first.length - 1].t + nullFrames * DT;
-    const second = generateLinearTrace(0.5, 0.6, 0.06);
+    const second = generateLinearTrace(0.44, 0.48, 0.06);
     for (const s of second) trace.push({ y: s.y, t: lastT + s.t });
     const events = runTrace(detector, trace);
-    expect(events.length).toBeLessThanOrEqual(1);
+    expect(events).toHaveLength(0);
   });
 
   it("sensitivity 2 lowers effective threshold compared to sensitivity 1", () => {
@@ -248,5 +248,58 @@ describe("StrumDetector at degraded frame rates", () => {
     const detector = new StrumDetector(TEST_CALIBRATION);
     const events = runTrace(detector, traceAtFps(0.4, 0.6, 1.5, 8));
     expect(events).toHaveLength(0);
+  });
+});
+
+describe("natural alternating strumming", () => {
+  for (const fps of [8, 12, 24, 30, 60]) {
+    it(`plays every up/down stroke without dwelling at ${fps} fps`, () => {
+      const detector = new StrumDetector(TEST_CALIBRATION);
+      const trace: Array<{ y: number; t: number }> = [];
+      const strokes = 12;
+      const framesPerStroke = Math.max(2, Math.round(fps * 0.2));
+      for (let i = 0; i <= strokes * framesPerStroke; i++) {
+        const phase = i / framesPerStroke;
+        const fraction = phase - Math.floor(phase);
+        const down = Math.floor(phase) % 2 === 0;
+        trace.push({ t: i / fps, y: 0.5 + 0.13 * (down ? fraction : 1 - fraction) });
+      }
+      const events = runTrace(detector, trace);
+      expect(events).toHaveLength(strokes);
+      expect(events.map((e) => e.direction)).toEqual(Array.from({ length: strokes }, (_, i) => i % 2 ? "up" : "down"));
+    });
+  }
+
+  it("supports brisk wrist strokes at eight strokes per second", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    const trace = Array.from({ length: 181 }, (_, i) => ({
+      t: i / 60, y: 0.55 - 0.065 * Math.cos(2 * Math.PI * 4 * i / 60),
+    }));
+    const events = runTrace(detector, trace);
+    expect(events).toHaveLength(24);
+    expect(events.every((e, i) => e.direction === (i % 2 ? "up" : "down"))).toBe(true);
+  });
+
+  it("does not invent a stroke across hand loss, stalls, or duplicate timestamps", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    expect(detector.update(0.4, 0)).toBeNull();
+    expect(detector.update(null, 0.033)).toBeNull();
+    expect(detector.update(0.7, 0.066)).toBeNull();
+    expect(detector.update(0.3, 0.066)).toBeNull();
+    expect(detector.update(0.3, 0.6)).toBeNull();
+    expect(detector.update(0.3, 0.633)).toBeNull();
+  });
+
+  it("recognizes a complete corridor crossing between two low-FPS frames", () => {
+    const detector = new StrumDetector(TEST_CALIBRATION);
+    detector.update(0.2, 0);
+    expect(detector.update(0.9, 0.125)?.direction).toBe("down");
+  });
+
+  it("uses measured noise to reject larger tremor without losing a deliberate stroke", () => {
+    const detector = new StrumDetector({ ...TEST_CALIBRATION, noiseFloor: 0.02, sensitivity: 3 });
+    const tremor = Array.from({ length: 60 }, (_, i) => ({ t: i / 30, y: 0.55 + Math.sin(i * 1.7) * 0.025 }));
+    expect(runTrace(detector, tremor)).toHaveLength(0);
+    expect(runTrace(detector, generateLinearTrace(tremor.at(-1)!.y, 0.72, 0.15, 2))).toHaveLength(1);
   });
 });

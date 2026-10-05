@@ -50,6 +50,8 @@ export interface TrackedHand {
   physical: PhysicalHand;
   /** 21 landmarks in MediaPipe normalized image coordinates. */
   landmarks: Point3[];
+  /** Metric 3-D landmarks from the model, used for joint geometry when available. */
+  worldLandmarks?: Point3[];
   /** MediaPipe handedness confidence 0..1. */
   score: number;
 }

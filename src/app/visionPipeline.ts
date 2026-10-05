@@ -9,7 +9,8 @@ import type {
 import type { VisionFrame } from "../vision/types";
 import { roleForPhysicalHand } from "../vision/types";
 import { normalizeFrameHands } from "../vision/normalizeLandmarks";
-import type { NormalizedHand } from "../gesture/gestureTypes";
+import { HandIdentityTracker } from "../vision/handIdentityTracker";
+import type { NormalizedHand, HandFeatures } from "../gesture/gestureTypes";
 import { extractHandFeatures } from "../gesture/gestureFeatures";
 import { ChordGestureRecognizer } from "../gesture/chordGestureRecognizer";
 import { GestureDebouncer } from "../gesture/gestureDebouncer";
@@ -32,6 +33,9 @@ export interface PipelineDebugStats {
   performanceCandidate: GestureCandidate | null;
   muteActive: boolean;
   strumState: string;
+  chordFingers: HandFeatures["extension"] | null;
+  performanceFingers: HandFeatures["extension"] | null;
+  strumMotion: StrumDetector["debug"];
   controlHold: { comboId: string; progress: number } | null;
   calibrationState: string;
   calibrationProgress: number;
@@ -72,6 +76,7 @@ export class VisionPipeline {
   private calibration: CalibrationData = DEFAULT_CALIBRATION;
 
   private readonly chordRecognizer = new ChordGestureRecognizer();
+  private readonly handTracker = new HandIdentityTracker();
   private readonly debouncer: GestureDebouncer;
   private readonly strumDetector: StrumDetector;
   private readonly muteDetector = new MuteDetector();
@@ -88,6 +93,9 @@ export class VisionPipeline {
   private lastChordCandidate: GestureCandidate | null = null;
   private lastPerfCandidate: GestureCandidate | null = null;
   private lastCandidateProgress = 0;
+  private lastChordFingers: HandFeatures["extension"] | null = null;
+  private lastPerfFingers: HandFeatures["extension"] | null = null;
+  private lastStrumT = -Infinity;
 
   constructor(bus: EventBus, options: VisionPipelineOptions) {
     this.bus = bus;
@@ -107,7 +115,9 @@ export class VisionPipeline {
   }
 
   setHandedness(handedness: Handedness): void {
+    if (this.handedness === handedness) return;
     this.handedness = handedness;
+    this.reset();
   }
 
   setEnabled(enabled: boolean): void {
@@ -150,7 +160,7 @@ export class VisionPipeline {
       this._calibrator.begin(frame.t);
     }
 
-    const hands = normalizeFrameHands(frame.hands, frame.t);
+    const hands = normalizeFrameHands(this.handTracker.update(frame.hands, frame.t), frame.t, frame.frameWidth / frame.frameHeight);
 
     // Calibration mode consumes frames and short-circuits performance logic.
     if (this._calibrator.state === "collecting") {
@@ -189,6 +199,7 @@ export class VisionPipeline {
       ? this.chordRecognizer.classify(chordFeatures)
       : null;
     this.lastChordCandidate = chordCandidate;
+    this.lastChordFingers = chordFeatures?.extension ?? null;
 
     const debounce = this.debouncer.update(chordCandidate, frame.t);
     this.lastCandidateProgress = debounce.candidateProgress;
@@ -213,6 +224,7 @@ export class VisionPipeline {
     const perfFeatures = perfHand ? extractHandFeatures(perfHand) : null;
     const perfCandidate = perfFeatures ? this.chordRecognizer.classify(perfFeatures) : null;
     this.lastPerfCandidate = perfCandidate;
+    this.lastPerfFingers = perfFeatures?.extension ?? null;
 
     const muteEvent = this.muteDetector.update(perfCandidate, frame.t);
     if (muteEvent) {
@@ -221,16 +233,20 @@ export class VisionPipeline {
     }
 
     const strum = this.strumDetector.update(
-      perfHand ? perfHand.palmCenterRaw.y : null,
+      perfHand ? (perfHand.strumPointRaw ?? perfHand.palmCenterRaw).y : null,
       frame.t,
     );
     if (strum) {
+      this.lastStrumT = frame.t;
       const event: StrumEvent = { ...strum, t: now };
       this.bus.publish(event);
     }
 
     // --- Two-hand control gestures ---
-    const control = this.controlRecognizer.update(chordCandidate, perfCandidate, frame.t);
+    // Playing G with an open strumming hand must not hold the two-open-palms
+    // stop combo. System holds only accumulate after strumming settles.
+    const moving = Math.abs(this.strumDetector.debug.velocity) > 0.75 || frame.t - this.lastStrumT < 0.5;
+    const control = this.controlRecognizer.update(moving ? null : chordCandidate, moving ? null : perfCandidate, frame.t);
     if (control) {
       const event: ControlEvent = { ...control, t: now };
       this.bus.publish(event);
@@ -251,6 +267,9 @@ export class VisionPipeline {
       performanceCandidate: this.lastPerfCandidate,
       muteActive: this.muteDetector.active,
       strumState: this.strumDetector.state,
+      chordFingers: this.lastChordFingers,
+      performanceFingers: this.lastPerfFingers,
+      strumMotion: this.strumDetector.debug,
       controlHold: this.controlRecognizer.holdProgress,
       calibrationState: this.calibrator.state,
       calibrationProgress: this.calibrator.progress,
@@ -265,10 +284,13 @@ export class VisionPipeline {
     this.pendingCalibrationStart = false;
     this._calibrator.reset();
     this.debouncer.reset();
+    this.handTracker.reset();
     this.strumDetector.reset();
     this.muteDetector.reset();
     this.controlRecognizer.reset();
     this.lastChordEventChord = null;
+    this.lastStrumT = -Infinity;
+    this.lastChordFingers = this.lastPerfFingers = null;
     this.frameTimes = [];
   }
 }

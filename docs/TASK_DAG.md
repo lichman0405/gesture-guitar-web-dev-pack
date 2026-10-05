@@ -161,3 +161,13 @@ Final status should include:
 - build result;
 - measured performance;
 - known non-blocking limitations.
+
+## Phase 14 — Recognition and natural strumming (completed, 2026-10-05)
+
+World-landmark forwarding → joint/bone geometry → exact/uncertain pose matching
+→ ten chord slots and settings/help → knuckle-point calibration → bidirectional
+motion legs → pick-grip/mute distinction → real browser/audio/export checks.
+
+Exit: typecheck/lint/build green; 308 unit tests; 18 development browser tests
+plus relevant final rechecks; 14 production flow tests. Real webcam/GPU still
+runs at up to 30 FPS. Human recognition accuracy needs actual playing feedback.

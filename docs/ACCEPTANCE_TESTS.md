@@ -136,3 +136,23 @@ devices; real-hand accuracy and light-dependent behavior still require a person.
 - no remote;
 - no push performed;
 - local commit history shows phase progression.
+
+## Post-MVP recognition checks (Phase 14)
+
+- Show all five fingers, then tuck only the thumb: G and F in default C mapping
+  must remain distinct. A shorter/upright thumb with four curled fingers selects
+  Am; changing palm orientation must not depend on fingertip screen height.
+- Try the additional little finger / rock / L / phone poses: D / E / Cm / Bb.
+  Custom slot 7–10 assignments must survive reload; keys 7/8/9/0 must match them.
+- Hold a chord while changing only the performance-hand fingers: no chord change
+  and no phantom strum. Short model label/order errors must preserve hand roles.
+- With thumb/index lightly touching as a pick grip, pivot the wrist up/down in
+  the calibrated region repeatedly without pausing: one event per stroke, correct
+  alternating direction, normal articulation. A deliberately complete fist mutes.
+- Keep both hands open while actively strumming G: no accidental stop control.
+- Lose/reacquire a hand or stall frames: no jump-triggered stroke. Jitter and
+  small settling outliers during calibration must not prevent intentional strokes.
+
+Automated coverage: 308 unit tests, synthetic 21-point/3-D gesture variants,
+continuous 8–60 FPS traces and real-browser audio/export checks. These checks
+must not be reported as a measured human recognition-accuracy percentage.

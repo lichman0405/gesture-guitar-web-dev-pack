@@ -1,92 +1,42 @@
-import type { HandFeatures, GestureCandidate, GestureId } from "./gestureTypes.ts";
-import { GESTURE_RULES, GESTURE_PRIORITY } from "./gestureVocabulary.ts";
+import type { HandFeatures, GestureCandidate } from "./gestureTypes";
+import { GESTURE_RULES, GESTURE_PRIORITY } from "./gestureVocabulary";
 
-function clamp01(v: number): number {
-  if (v < 0) return 0;
-  if (v > 1) return 1;
-  return v;
-}
-
-/**
- * Deterministic geometric chord-gesture classifier.
- *
- * Evaluates a fixed rule table against per-frame HandFeatures and returns
- * the highest-confidence GestureCandidate, or null when no rule is
- * sufficiently matched.
- *
- * Designed for ~30 Hz operation: allocation-light, no globals, no async.
- */
+/** Exact pose matching: ambiguous/bending fingers retain the previous chord via debounce. */
 export class ChordGestureRecognizer {
-  /**
-   * Classify a single frame of hand features.
-   *
-   * @param features - Normalized hand features for one hand in one frame.
-   * @returns The winning gesture candidate, or null if no rule scores >= 0.55.
-   */
   classify(features: HandFeatures): GestureCandidate | null {
-    if (
-      Number.isNaN(features.thumbIndexTipDistance) ||
-      Number.isNaN(features.curlAmount) ||
-      Number.isNaN(features.handScale) ||
-      Number.isNaN(features.tipDistances.thumb) ||
-      Number.isNaN(features.tipDistances.index) ||
-      Number.isNaN(features.tipDistances.middle) ||
-      Number.isNaN(features.tipDistances.ring) ||
-      Number.isNaN(features.tipDistances.pinky)
-    ) {
-      return null;
-    }
-
-    let bestScore = -Infinity;
-    let bestId: GestureId | null = null;
-
-    for (const rule of GESTURE_RULES) {
-      let score = 1.0;
-
-      const fingerKeys = ["thumb", "index", "middle", "ring", "pinky"] as const;
-      for (const key of fingerKeys) {
+    const values = [features.thumbIndexTipDistance, features.curlAmount, features.handScale,
+      ...Object.values(features.tipDistances), ...Object.values(features.extension ?? {})];
+    if (!values.every(Number.isFinite) || features.handScale <= 0) return null;
+    let best: GestureCandidate | null = null;
+    for (const id of GESTURE_PRIORITY) {
+      const rule = GESTURE_RULES.find((r) => r.id === id)!;
+      if (rule.minIndexPipAngle !== undefined &&
+        (features.indexPipAngle === undefined || !Number.isFinite(features.indexPipAngle) || features.indexPipAngle < rule.minIndexPipAngle)) continue;
+      if (rule.maxThumbIndexDistance !== undefined && features.thumbIndexTipDistance > rule.maxThumbIndexDistance) continue;
+      if (rule.minCurl !== undefined && features.curlAmount < rule.minCurl) continue;
+      if (rule.maxCurl !== undefined && features.curlAmount > rule.maxCurl) continue;
+      let confidence = 1;
+      let matches = true;
+      for (const key of ["thumb", "index", "middle", "ring", "pinky"] as const) {
         const expected = rule.fingers[key];
-        if (expected !== "any" && features.fingers[key] !== expected) {
-          score -= 0.3;
+        if (expected === "any") continue;
+        if (features.fingers[key] !== expected) { matches = false; break; }
+        const strength = features.extension?.[key];
+        if (strength !== undefined) {
+          // Do not turn a half-bent finger into a confidently different pose.
+          const certainty = expected ? strength : 1 - strength;
+          if (certainty < 0.62) { matches = false; break; }
+          confidence = Math.min(confidence, 0.6 + 0.4 * (certainty - 0.62) / 0.38);
         }
       }
-
+      if (!matches) continue;
       if (rule.maxThumbIndexDistance !== undefined) {
-        const ratio = features.thumbIndexTipDistance / (rule.maxThumbIndexDistance * 2);
-        score *= clamp01(1 - ratio);
+        confidence = Math.min(confidence, 1 - 0.35 * features.thumbIndexTipDistance / rule.maxThumbIndexDistance);
+        // Pinch takes precedence over the thumb-folded four-finger pose.
+        return { gestureId: id, confidence };
       }
-
-      if (rule.minCurl !== undefined && features.curlAmount < rule.minCurl) {
-        const overshoot = rule.minCurl - features.curlAmount;
-        score -= overshoot * 0.6;
-      }
-
-      if (rule.maxCurl !== undefined && features.curlAmount > rule.maxCurl) {
-        const overshoot = features.curlAmount - rule.maxCurl;
-        score -= overshoot * 0.6;
-      }
-
-      if (Number.isNaN(score)) continue;
-
-      if (score < bestScore) continue;
-
-      if (score === bestScore && bestId !== null) {
-        const currentPriority = GESTURE_PRIORITY.indexOf(rule.id);
-        const bestPriority = GESTURE_PRIORITY.indexOf(bestId);
-        if (currentPriority > bestPriority) continue;
-      }
-
-      bestScore = score;
-      bestId = rule.id;
+      if (!best || confidence > best.confidence) best = { gestureId: id, confidence };
     }
-
-    if (bestId === null || bestScore < 0.55) {
-      return null;
-    }
-
-    return {
-      gestureId: bestId,
-      confidence: clamp01(bestScore),
-    };
+    return best;
   }
 }

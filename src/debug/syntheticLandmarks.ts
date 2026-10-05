@@ -4,6 +4,7 @@
 
 import { HAND_LANDMARK_COUNT, LandmarkIndex } from "../vision/types";
 import type { PhysicalHand, Point3, TrackedHand } from "../vision/types";
+import type { GestureId } from "../gesture/gestureTypes";
 
 export interface SyntheticHandOptions {
   physical?: PhysicalHand;
@@ -205,15 +206,7 @@ export function buildSyntheticHand(options?: SyntheticHandOptions): TrackedHand 
  * Build a synthetic hand matching a named gesture preset.
  */
 export function buildGestureHand(
-  gesture:
-    | "index"
-    | "index-middle"
-    | "index-middle-ring"
-    | "four-fingers"
-    | "open-palm"
-    | "thumbs-up"
-    | "ok-sign"
-    | "fist",
+  gesture: GestureId,
   options?: SyntheticHandOptions,
 ): TrackedHand {
   const baseCurls: Partial<
@@ -274,6 +267,21 @@ export function buildGestureHand(
       baseCurls.ring = 0;
       baseCurls.pinky = 0;
       baseCurls.thumb = 0;
+      break;
+    case "pick-grip":
+      thumbIndexPinch = true;
+      baseCurls.index = 0.8;
+      baseCurls.middle = baseCurls.ring = baseCurls.pinky = 1;
+      baseCurls.thumb = 0;
+      break;
+    case "pinky":
+    case "index-pinky":
+    case "thumb-index":
+    case "thumb-pinky":
+      baseCurls.index = gesture === "index-pinky" || gesture === "thumb-index" ? 0 : 1;
+      baseCurls.middle = baseCurls.ring = 1;
+      baseCurls.pinky = gesture === "thumb-index" ? 1 : 0;
+      baseCurls.thumb = gesture === "thumb-index" || gesture === "thumb-pinky" ? 0 : 0.8;
       break;
   }
 

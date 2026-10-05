@@ -59,6 +59,7 @@ interface Sample {
   scale: number;
   wristRaw: Point3;
   palmCenterRaw: Point3;
+  motionPoint: Point3;
   role: HandRole;
 }
 
@@ -130,6 +131,7 @@ export class Calibrator {
         scale: hand.scale,
         wristRaw: hand.wristRaw,
         palmCenterRaw: hand.palmCenterRaw,
+        motionPoint: hand.strumPointRaw ?? hand.palmCenterRaw,
         role,
       });
     }
@@ -163,7 +165,9 @@ export class Calibrator {
 
   private _computeResult(): void {
     const totalSamples = this._samples.length;
-    const scales = this._samples.map((s) => s.scale);
+    const performance = this._samples.filter((s) => s.role === "performance");
+    const motionSamples = performance.length > 0 ? performance : this._samples;
+    const scales = motionSamples.map((s) => s.scale);
     const handScale = totalSamples > 0 ? median(scales) : DEFAULT_CALIBRATION.handScale;
 
     if (totalSamples < 8 || handScale < 0.03) {
@@ -174,19 +178,15 @@ export class Calibrator {
       return;
     }
 
-    // Noise floor: prefer performance hand, fallback to any hand.
-    const perfWrists = this._samples
-      .filter((s) => s.role === "performance")
-      .map((s) => s.wristRaw);
-    const anyWrists = this._samples.map((s) => s.wristRaw);
-    const noiseWrists = perfWrists.length > 0 ? perfWrists : anyWrists;
+    // Vertical noise at the strum point: prefer performance hand, fallback to any hand.
+    const noiseWrists = motionSamples.map((s) => s.motionPoint);
 
     let noiseFloor: number;
     if (noiseWrists.length > 0) {
-      const xs = noiseWrists.map((p) => p.x);
       const ys = noiseWrists.map((p) => p.y);
-      const zs = noiseWrists.map((p) => p.z);
-      noiseFloor = (stddev(xs) + stddev(ys) + stddev(zs)) / 3;
+      // Ignore a few settling/occlusion outliers at the start of calibration.
+      const center = median(ys);
+      noiseFloor = median(ys.map((y) => Math.abs(y - center))) * 1.4826;
     } else {
       noiseFloor = DEFAULT_CALIBRATION.noiseFloor;
     }
@@ -204,7 +204,10 @@ export class Calibrator {
       performanceSamples.length > 0 ? meanPoint(performanceSamples) : null;
 
     // Strum corridor derived from performance hand, or any available hand.
-    const neutralForCorridor = performanceHandNeutral ?? chordHandNeutral;
+    const neutralForCorridor = motionSamples.length > 0 ? {
+      x: median(noiseWrists.map((p) => p.x)), y: median(noiseWrists.map((p) => p.y)),
+      z: median(noiseWrists.map((p) => p.z)),
+    } : null;
     let strumCorridor: StrumCorridor;
     if (neutralForCorridor) {
       const neutralY = neutralForCorridor.y;
@@ -217,6 +220,7 @@ export class Calibrator {
 
     this._result = {
       version: 1,
+      motionPoint: "knuckles",
       calibratedAt: new Date().toISOString(),
       handScale,
       noiseFloor,

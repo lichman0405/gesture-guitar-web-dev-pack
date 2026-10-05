@@ -135,7 +135,10 @@ workerSelf.onmessage = async (event: MessageEvent<VisionWorkerInMessage>) => {
         const physical = handedness && handedness.length > 0 ? handedness[0].categoryName : undefined;
         if (physical !== "Left" && physical !== "Right") continue;
         const score = handedness && handedness.length > 0 ? handedness[0].score : 0;
-        hands.push({ physical, landmarks, score });
+        const worldLandmarks = result.worldLandmarks[i]?.map((lm) => ({
+          x: lm.x, y: lm.y, z: lm.z,
+        }));
+        hands.push({ physical, landmarks, worldLandmarks, score });
       }
       const frame: VisionFrame = {
         t: msg.t,

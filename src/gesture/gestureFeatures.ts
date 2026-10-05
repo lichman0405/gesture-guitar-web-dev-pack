@@ -1,161 +1,66 @@
-/**
- * Extract classification-ready features from a normalized hand.
- */
-
+/** Rotation- and scale-independent joint geometry; no screen-axis finger tests. */
 import { LandmarkIndex } from "../vision/types";
 import type { Point3 } from "../vision/types";
 import type { FingerExtension, HandFeatures, NormalizedHand } from "./gestureTypes";
 
-/** Data-driven thresholds for finger extension and curl. */
-export const FEATURE_THRESHOLDS = {
-  finger: {
-    angleStraightMinDeg: 150,
-    tipDistanceMin: 1.5,
-  },
-  thumb: {
-    tipDistanceMin: 1.15,
-    indexMcpDistanceMin: 0.9,
-  },
-  curl: {
-    extendedDistance: 1.7,
-    curledDistance: 0.9,
-  },
-} as const;
-
-/** Euclidean distance between two 3-D points. */
 export function dist(a: Point3, b: Point3): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  const dz = a.z - b.z;
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-/**
- * Compute the interior angle (in degrees) at point `b` formed by a-b-c.
- */
 export function jointAngleDegrees(a: Point3, b: Point3, c: Point3): number {
   const ba = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
   const bc = { x: c.x - b.x, y: c.y - b.y, z: c.z - b.z };
-  const dot = ba.x * bc.x + ba.y * bc.y + ba.z * bc.z;
-  const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y + ba.z * ba.z);
-  const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y + bc.z * bc.z);
-  if (magBA === 0 || magBC === 0) return 0;
-  let cosTheta = dot / (magBA * magBC);
-  cosTheta = Math.max(-1, Math.min(1, cosTheta));
-  return (Math.acos(cosTheta) * 180) / Math.PI;
+  const lengths = dist(a, b) * dist(b, c);
+  if (lengths < 1e-8) return 0;
+  const cosine = (ba.x * bc.x + ba.y * bc.y + ba.z * bc.z) / lengths;
+  return Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
 }
 
-function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
-}
+const ramp = (value: number, low: number, high: number) =>
+  Math.max(0, Math.min(1, (value - low) / (high - low)));
+const LONG_FINGERS = ["index", "middle", "ring", "pinky"] as const;
 
-/**
- * Derive scale-normalized features from a normalized hand.
- */
 export function extractHandFeatures(hand: NormalizedHand): HandFeatures {
-  const { landmarks, physical, scale, wristRaw, palmCenterRaw, t } = hand;
-
-  const tipIdx = {
-    thumb: LandmarkIndex.THUMB_TIP,
-    index: LandmarkIndex.INDEX_TIP,
-    middle: LandmarkIndex.MIDDLE_TIP,
-    ring: LandmarkIndex.RING_TIP,
-    pinky: LandmarkIndex.PINKY_TIP,
-  };
-
-  const mcpIdx = {
-    index: LandmarkIndex.INDEX_MCP,
-    middle: LandmarkIndex.MIDDLE_MCP,
-    ring: LandmarkIndex.RING_MCP,
-    pinky: LandmarkIndex.PINKY_MCP,
-  };
-
-  const pipIdx = {
-    index: LandmarkIndex.INDEX_PIP,
-    middle: LandmarkIndex.MIDDLE_PIP,
-    ring: LandmarkIndex.RING_PIP,
-    pinky: LandmarkIndex.PINKY_PIP,
-  };
-
-  const dipIdx = {
-    index: LandmarkIndex.INDEX_DIP,
-    middle: LandmarkIndex.MIDDLE_DIP,
-    ring: LandmarkIndex.RING_DIP,
-    pinky: LandmarkIndex.PINKY_DIP,
-  };
-
+  const p = hand.landmarks;
+  const wrist = p[LandmarkIndex.WRIST];
   const tipDistances = {
-    thumb: dist(landmarks[tipIdx.thumb], landmarks[LandmarkIndex.WRIST]),
-    index: dist(landmarks[tipIdx.index], landmarks[LandmarkIndex.WRIST]),
-    middle: dist(landmarks[tipIdx.middle], landmarks[LandmarkIndex.WRIST]),
-    ring: dist(landmarks[tipIdx.ring], landmarks[LandmarkIndex.WRIST]),
-    pinky: dist(landmarks[tipIdx.pinky], landmarks[LandmarkIndex.WRIST]),
+    thumb: dist(p[4], wrist), index: dist(p[8], wrist), middle: dist(p[12], wrist),
+    ring: dist(p[16], wrist), pinky: dist(p[20], wrist),
   };
-
-  const fingers: FingerExtension = {
-    thumb: false,
-    index: false,
-    middle: false,
-    ring: false,
-    pinky: false,
-  };
-
-  const fingerNames: Array<"index" | "middle" | "ring" | "pinky"> = [
-    "index",
-    "middle",
-    "ring",
-    "pinky",
-  ];
-
-  for (const name of fingerNames) {
-    const angle = jointAngleDegrees(
-      landmarks[mcpIdx[name]],
-      landmarks[pipIdx[name]],
-      landmarks[dipIdx[name]],
+  const extension = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+  const fingers: FingerExtension = { thumb: false, index: false, middle: false, ring: false, pinky: false };
+  for (let i = 0; i < LONG_FINGERS.length; i++) {
+    const name = LONG_FINGERS[i];
+    const mcp = p[5 + i * 4], pip = p[6 + i * 4], dip = p[7 + i * 4], tip = p[8 + i * 4];
+    const length = dist(mcp, pip) + dist(pip, dip) + dist(dip, tip);
+    const reach = length > 1e-8 ? dist(mcp, tip) / length : 0;
+    // A straight PIP alone also occurs with a curled DIP or folded MCP.
+    // All three cues must agree; short little fingers need no wrist-distance cutoff.
+    const outward = jointAngleDegrees(wrist, mcp, pip);
+    extension[name] = Math.min(
+      ramp(jointAngleDegrees(mcp, pip, dip), 105, 155),
+      ramp(jointAngleDegrees(pip, dip, tip), 100, 150),
+      ramp(reach, 0.55, 0.9),
+      ramp(outward, 65, 115),
     );
-    const extendedByAngle =
-      angle > FEATURE_THRESHOLDS.finger.angleStraightMinDeg;
-    const extendedByDist =
-      tipDistances[name] > FEATURE_THRESHOLDS.finger.tipDistanceMin;
-    fingers[name] = extendedByAngle || extendedByDist;
+    fingers[name] = extension[name] >= 0.5;
   }
-
-  const thumbTipToWrist = tipDistances.thumb;
-  const thumbTipToIndexMcp = dist(
-    landmarks[tipIdx.thumb],
-    landmarks[mcpIdx.index],
+  const thumbLength = dist(p[1], p[2]) + dist(p[2], p[3]) + dist(p[3], p[4]);
+  extension.thumb = Math.min(
+    ramp(jointAngleDegrees(p[1], p[2], p[3]), 130, 160),
+    ramp(jointAngleDegrees(p[2], p[3], p[4]), 125, 160),
+    ramp(thumbLength > 1e-8 ? dist(p[1], p[4]) / thumbLength : 0, 0.55, 0.9),
+    ramp(dist(p[4], p[5]), 0.25, 0.6),
   );
-  fingers.thumb =
-    thumbTipToWrist > FEATURE_THRESHOLDS.thumb.tipDistanceMin &&
-    thumbTipToIndexMcp > FEATURE_THRESHOLDS.thumb.indexMcpDistanceMin;
-
-  const thumbIndexTipDistance = dist(
-    landmarks[tipIdx.thumb],
-    landmarks[tipIdx.index],
-  );
-
-  const curlRange =
-    FEATURE_THRESHOLDS.curl.extendedDistance -
-    FEATURE_THRESHOLDS.curl.curledDistance;
-  let curlSum = 0;
-  for (const name of fingerNames) {
-    const c = clamp01(
-      (FEATURE_THRESHOLDS.curl.extendedDistance - tipDistances[name]) /
-        curlRange,
-    );
-    curlSum += c;
-  }
-  const curlAmount = curlSum / fingerNames.length;
-
+  const thumbIndexTipDistance = dist(p[4], p[8]);
+  // A touching thumb and index is a pinch, not an abducted thumb.
+  if (thumbIndexTipDistance < 0.3) extension.thumb = 0;
+  fingers.thumb = extension.thumb >= 0.5;
   return {
-    physical,
-    t,
-    fingers,
-    tipDistances,
+    physical: hand.physical, t: hand.t, fingers, extension, tipDistances,
     thumbIndexTipDistance,
-    curlAmount,
-    handScale: scale,
-    wristRaw,
-    palmCenterRaw,
+    indexPipAngle: jointAngleDegrees(p[5], p[6], p[7]),
+    curlAmount: LONG_FINGERS.reduce((sum, name) => sum + 1 - extension[name], 0) / 4,
+    handScale: hand.scale, wristRaw: hand.wristRaw, palmCenterRaw: hand.palmCenterRaw,
   };
 }

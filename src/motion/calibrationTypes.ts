@@ -17,10 +17,12 @@ export interface StrumCorridor {
 
 export interface CalibrationData {
   version: 1;
+  /** Reject old persisted wrist-centered corridors after the motion-point change. */
+  motionPoint?: "knuckles";
   calibratedAt: string;
-  /** Mean hand scale (wrist -> middle MCP, image-normalized units) across both hands. */
+  /** Median performance-hand scale (wrist -> middle MCP, image-normalized units). */
   handScale: number;
-  /** Std-dev of wrist position while the user holds still = baseline motion noise. */
+  /** Robust vertical noise estimate at the strum point while holding still. */
   noiseFloor: number;
   /** Baseline wrist positions per role (raw image-normalized). */
   chordHandNeutral: Point3 | null;
@@ -34,6 +36,7 @@ export interface CalibrationData {
 /** Sensible pre-calibration defaults so keyboard mode and first-run work. */
 export const DEFAULT_CALIBRATION: CalibrationData = {
   version: 1,
+  motionPoint: "knuckles",
   calibratedAt: "",
   handScale: 0.2,
   noiseFloor: 0.005,
@@ -57,7 +60,7 @@ export interface StrumThresholds {
 
 export const DEFAULT_STRUM_THRESHOLDS: StrumThresholds = {
   minVelocity: 1.5,
-  minDisplacement: 0.6,
+  minDisplacement: 0.35,
   cooldownSeconds: 0.09,
   accentVelocity: 6,
 };

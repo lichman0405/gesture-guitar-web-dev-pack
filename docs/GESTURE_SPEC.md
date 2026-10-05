@@ -55,8 +55,9 @@ All values are configurable constants.
 
 The performance hand uses motion history, not only discrete hand poses.
 
-Candidate primary tracking point:
-- wrist or palm center.
+Primary tracking point: midpoint of index and middle MCP knuckles in image space.
+It follows both forearm movement and wrist pivot, without following finger curl.
+Calibration uses the identical point for neutral corridor and vertical noise.
 
 Maintain timestamped normalized positions.
 
@@ -122,7 +123,7 @@ Mandatory keyboard mapping example:
 
 | Key | Event |
 |---|---|
-| 1..6 | chord slots |
+| 1..9 / 0 | chord slots 1..10 |
 | C/G/A/F etc. | explicit chord in debug mode |
 | ArrowDown | down strum |
 | ArrowUp | up strum |

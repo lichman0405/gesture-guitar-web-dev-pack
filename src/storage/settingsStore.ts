@@ -6,6 +6,7 @@ import type { KeyValueAdapter } from "./adapters";
 import { LocalStorageAdapter } from "./adapters";
 import { MAJOR_KEYS, normalizeChordSymbol } from "../music/theory";
 import { getPatternForMeter } from "../guided/patterns";
+import { SLOT_IDS } from "../gesture/gestureTypes";
 
 /** User-configurable application settings. */
 export interface AppSettings {
@@ -108,7 +109,7 @@ function sanitize(raw: unknown): AppSettings {
   if (isObject(p.customMapping)) {
     merged.customMapping = {};
     for (const [slot, chord] of Object.entries(p.customMapping)) {
-      if (!/^slot-[1-6]$/.test(slot) || typeof chord !== "string" || !chord) continue;
+      if (!(SLOT_IDS as readonly string[]).includes(slot) || typeof chord !== "string" || !chord) continue;
       try { merged.customMapping[slot] = normalizeChordSymbol(chord); } catch { /* Ignore invalid chords. */ }
     }
   }

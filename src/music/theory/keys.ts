@@ -3,6 +3,7 @@
  */
 
 import { normalizeChordSymbol, type ChordQuality } from "./chords";
+import { SLOT_IDS } from "../../gesture/gestureTypes";
 
 /** The 12 major keys, expressed with sharp canonical roots. */
 export const MAJOR_KEYS: string[] = [
@@ -24,14 +25,7 @@ export const MAJOR_KEYS: string[] = [
 export const SCALE_SLOT_ORDER = ["I", "ii", "iii", "IV", "V", "vi"] as const;
 
 /** Stable slot IDs that correspond to the scale-degree roles. */
-export const SCALE_SLOT_IDS = [
-  "slot-1",
-  "slot-2",
-  "slot-3",
-  "slot-4",
-  "slot-5",
-  "slot-6",
-];
+export const SCALE_SLOT_IDS = [...SLOT_IDS];
 
 const SCALE_DEGREES = [0, 2, 4, 5, 7, 9];
 const SCALE_QUALITIES: ChordQuality[] = [
@@ -76,8 +70,15 @@ export function diatonicChords(keyRoot: string): Record<string, string> {
 export function scaleModeMapping(keyRoot: string): Record<string, string> {
   const chords = diatonicChords(keyRoot);
   const result: Record<string, string> = {};
-  for (let i = 0; i < SCALE_SLOT_IDS.length; i++) {
+  for (let i = 0; i < SCALE_SLOT_ORDER.length; i++) {
     result[SCALE_SLOT_IDS[i]] = chords[SCALE_SLOT_ORDER[i]];
   }
+  // Common secondary/borrowed chords alongside the original six scale slots:
+  // II, III, i, bVII. Custom mode can assign any of the 24 major/minor chords.
+  const root = normalizeChordSymbol(keyRoot).replace(/m$/, "");
+  const rootPc = MAJOR_KEYS.indexOf(root);
+  [2, 4, 0, 10].forEach((offset, index) => {
+    result[SCALE_SLOT_IDS[index + 6]] = MAJOR_KEYS[(rootPc + offset) % 12] + (index === 2 ? "m" : "");
+  });
   return result;
 }

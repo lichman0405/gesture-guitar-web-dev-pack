@@ -22,13 +22,13 @@ const dwell = traceAtFps(0.7, 0.7, 0.6, fps, sweep[sweep.length - 1].t);
 dwell.shift();
 const trace = sweep.concat(dwell);
 
-const det = d as unknown as Record<string, unknown>;
 for (const s of trace) {
   const ev = d.update(s.y, s.t);
+  const motion = d.debug;
   console.log(
-    `t=${s.t.toFixed(3)} y=${s.y.toFixed(3)} state=${det._state} ` +
-      `acc=${(det.accumulatedDisplacement as number).toFixed(3)} ` +
-      `peak=${(det.peakAbsV as number).toFixed(2)} armed=${det.armed}` +
+    `t=${s.t.toFixed(3)} y=${s.y.toFixed(3)} state=${d.state} ` +
+      `displacement=${motion.displacement.toFixed(3)} ` +
+      `velocity=${motion.velocity.toFixed(2)} direction=${motion.direction} fired=${motion.fired}` +
       (ev ? `  >>> EVENT ${ev.direction}` : ""),
   );
 }

@@ -261,3 +261,75 @@ Environment notes:
 Remaining limitation: real-hand gesture accuracy across users, poses and lighting
 has not been systematically measured. The real-device diagnostic measures the
 camera/inference pipeline; it does not prove recognition accuracy on a human.
+
+## Phase 14 — Finger recognition and natural strumming (2026-10-05)
+
+User-reported problems: five-finger/open-palm and thumbs-up were unreliable,
+normal alternating strokes did not behave like guitar strumming, and six chord
+poses were insufficient.
+
+Changes:
+- Worker now forwards MediaPipe's metric worldLandmarks. Finger geometry uses
+  these 3-D points; fallback image geometry corrects x/z vs y aspect ratio.
+  Motion/overlay positions remain in normalized image coordinates.
+- Finger extension uses PIP, DIP, MCP direction and local bone-length reach.
+  Thumb uses MCP/IP straightness, local reach and abduction from the index base,
+  instead of requiring a long wrist-to-tip distance. Curl follows joint extension.
+- Classifier requires the requested finger mask rather than giving a wrong pose
+  0.7 confidence for one mismatched finger. Partial bends yield uncertainty;
+  chord debounce/retention preserves the previous chord during transitions.
+  OK pinch now gets usable confidence throughout its accepted distance range.
+- Short-lived hand-label flicker is resolved by wrist continuity; both hands are
+  assigned uniquely even when output order changes. Tracks expire after 0.4 s.
+- New fixed chord poses: little finger, index+little finger (rock), thumb+index
+  (L), thumb+little finger (phone). Ten slots retain the original first six;
+  C mapping is C, Dm, Em, F, G, Am, D, E, Cm, Bb (canonical A#). All twelve keys
+  transpose the extra II/III/i/bVII slots. Custom mode assigns any of the 24
+  supported major/minor chords, persists all ten slots, and shows pose names.
+  Keyboard slots 7/8/9/0 are available; 0 selects slot 10.
+- Strums follow the index/middle MCP midpoint, allowing wrist pivot as well as
+  translation while ignoring finger-only pose changes. Calibration uses the same
+  point, performance-hand scale, median neutral and robust MAD vertical noise.
+  Old wrist-centered persisted calibration is rejected via motionPoint metadata.
+- Detector emits once per directional leg, re-arms on a noise-qualified reversal
+  without requiring a pause, counts displacement from the true extremum, and
+  accepts a corridor crossing between sparse frames. Default displacement is
+  0.35 hand scales (was 0.6), bounded below by four times measured noise. Hand
+  loss, >0.3 s stalls and duplicate timestamps do not create phantom strokes.
+  The 90 ms refractory period and same-direction rest guard remain.
+- Pick grip (thumb/index touch, index PIP >=95 degrees) is reserved and does not
+  activate fist mute. A fully closed index still distinguishes deliberate fist.
+  Active strumming resets system holds so two open hands do not stop a G chord.
+- Live help, calibration instructions, yellow tracking-point overlay, per-hand
+  finger extension and velocity/displacement/threshold debug readouts updated.
+  debug-strum.ts uses the detector's public diagnostics instead of removed fields.
+- Procedural Karplus-Strong audio, outside-React processing, WASM patches, startup
+  delegate benchmark and one-second worker watchdog retained.
+
+Verification:
+- Typecheck, lint and production build passed.
+- 308 unit/integration tests passed (30 files). Geometry checks cover 13 poses on
+  both physical hands with rotation, 3-D tilt, scale and landmark jitter (468
+  combinations); separate regressions cover short thumbs, curled DIP, half-bent
+  fingers, hand-label errors, calibration outliers and persisted compatibility.
+- Continuous alternating strokes pass at 8/12/24/30/60 FPS, and sinusoidal wrist
+  strokes at eight strokes/second. Pipeline checks include a fixed wrist pivot,
+  finger-only changes without phantom strums, open-palm playing without stop,
+  and normal pick-grip articulation versus deliberate fist mute.
+- Development browser suite: 18 passed (ten-minute soak remains opt-in; it was
+  completed in Phase 13 and was not repeated for this change). After final
+  pick-grip/MAD changes, relevant gesture/audio/export/model tests rechecked.
+  Ten real detector poses and twenty alternating pick-grip strokes reached real
+  browser audio and recording JSON; all strokes had normal articulation.
+- Production browser flows: 14 passed; the dev-only landmark injection test is
+  skipped in production. New custom slots persist and work in the built app.
+- Headed real-camera/GPU diagnostic: startup GPU 5.30 ms; measured inference
+  10.6, 8.5, 7.8, 6.8, 7.8, 7.4 ms; FPS 24,24,24,30,29,30.
+- Detector-chain benchmark before the final small grip/MAD changes: 0.0095 ms
+  per two-hand frame; bus-to-six-voice scheduling 0.0063 ms; cold KS synthesis
+  median 3.32 ms. debug-strum.ts at 8 FPS emits one down event and runs cleanly.
+
+Practical limit: geometric regressions use synthetic landmarks, not labeled
+human-video accuracy measurements. Real-device diagnostics verify performance,
+not recognition correctness for all people/lighting/occlusion conditions. The
+updated app should be refreshed and recalibrated in the actual playing pose.

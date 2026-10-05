@@ -116,6 +116,15 @@ export function CameraView({
           ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
           ctx.fill();
         }
+        const indexKnuckle = hand.landmarks[5], middleKnuckle = hand.landmarks[9];
+        if (indexKnuckle && middleKnuckle) {
+          ctx.strokeStyle = "#ffeb3b";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc((indexKnuckle.x + middleKnuckle.x) / 2 * w,
+            (indexKnuckle.y + middleKnuckle.y) / 2 * h, 7, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     };
     raf = requestAnimationFrame(draw);

@@ -44,7 +44,7 @@ function MeterBar({ meter, label }: { meter: LevelMeter | null; label: string })
 }
 
 const KEYBOARD_HINTS: [string, string][] = [
-  ["1–6", "chord slots"],
+  ["1–9 / 0", "chord slots 1–10"],
   ["C D E F G A B (+Shift)", "explicit chord (minor)"],
   ["↓ / ↑", "strum down / up"],
   ["Shift / Ctrl + strum", "accent / soft"],
@@ -236,10 +236,18 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
                   </dd>
                   <dt>Committed</dt>
                   <dd>{debug.stats.committedGesture ?? "—"}</dd>
+                  <dt>和弦手 · 拇/食/中/无名/小指</dt>
+                  <dd data-testid="chord-fingers">{debug.stats.chordFingers
+                    ? Object.values(debug.stats.chordFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>
+                  <dt>扫弦手 · 拇/食/中/无名/小指</dt>
+                  <dd>{debug.stats.performanceFingers
+                    ? Object.values(debug.stats.performanceFingers).map((v) => `${Math.round(v * 100)}%`).join(" / ") : "未检测到"}</dd>
                   <dt>Mute</dt>
                   <dd>{debug.stats.muteActive ? "active" : "off"}</dd>
                   <dt>Strum detector</dt>
                   <dd>{debug.stats.strumState}</dd>
+                  <dt>扫弦速度 / 位移 / 门槛</dt>
+                  <dd>{debug.stats.strumMotion.velocity.toFixed(1)} / {Math.abs(debug.stats.strumMotion.displacement).toFixed(2)} / {debug.stats.strumMotion.minimumDisplacement.toFixed(2)}</dd>
                   <dt>Control hold</dt>
                   <dd>
                     {debug.stats.controlHold

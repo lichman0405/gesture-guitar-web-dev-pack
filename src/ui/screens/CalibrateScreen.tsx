@@ -115,6 +115,7 @@ export function CalibrateScreen({
       <p className="hint">
         Show <strong>both hands</strong> to the camera and settle into a comfortable
         playing position. Hold still for a moment.
+        扫弦手放在准备弹的位置，拇指和食指可以像捏拨片一样轻捏；校准后用手腕连续上下扫。
       </p>
 
       <div className="calibrate-camera">

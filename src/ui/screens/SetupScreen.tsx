@@ -1,6 +1,7 @@
 import { MAJOR_KEYS, CHORD_VOCABULARY } from "../../music/theory";
 import { normalizeChordSymbol } from "../../music/theory";
 import { useState } from "react";
+import { SLOT_IDS, DEFAULT_SLOT_GESTURES, GESTURE_LABELS } from "../../gesture/gestureTypes";
 import { INSTRUMENT_PRESETS } from "../../music/engine/InstrumentPreset";
 import { STRUM_PATTERNS } from "../../guided/patterns";
 import type { AppSettings } from "../../storage/settingsStore";
@@ -111,7 +112,7 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
           value={settings.chordMappingMode}
           onChange={(e) => onChange({ chordMappingMode: e.target.value as "scale" | "custom" })}
         >
-          <option value="scale">Scale Mode (key-based)</option>
+          <option value="scale">Scale Mode (10 chords per key)</option>
           <option value="custom">Custom Chord Set</option>
         </select>
       </section>
@@ -134,11 +135,10 @@ export function SetupScreen({ settings, onChange, onContinue, onBack, onKeyboard
       ) : (
         <fieldset className="field custom-mapping">
           <legend>Custom slot mapping</legend>
-          {[1, 2, 3, 4, 5, 6].map((n) => {
-            const slotId = `slot-${n}`;
+          {SLOT_IDS.map((slotId, index) => {
             return (
               <label key={slotId}>
-                Slot {n}
+                Slot {index + 1} · {GESTURE_LABELS[DEFAULT_SLOT_GESTURES[slotId]]}
                 <select
                   value={settings.customMapping[slotId] ?? ""}
                   onChange={(e) =>

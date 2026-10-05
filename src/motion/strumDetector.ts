@@ -1,202 +1,145 @@
 import type { CalibrationData, StrumThresholds } from "./calibrationTypes";
 import { DEFAULT_CALIBRATION, DEFAULT_STRUM_THRESHOLDS } from "./calibrationTypes";
 import type { StrumEvent } from "../performance/eventTypes";
-import { VelocityEstimator } from "./velocityEstimator";
-import { ExponentialSmoother } from "./motionSmoother";
 
 export interface StrumDetectorOptions {
   thresholds?: Partial<StrumThresholds>;
   muted?: () => boolean;
 }
 
-type Direction = "down" | "up";
-
-/**
- * Vision-based strum detector for the performance hand.
- *
- * Tuning:
- * - y smoother alpha = 0.6 — slightly heavier than the velocity smoother
- *   because raw y comes from noisy landmark detection.
- * - VelocityEstimator: window 0.12 s, smoothing alpha 0.5. The window must
- *   span several frames even on slow cameras: at 60 ms it collapses to 1–2
- *   samples once the frame rate drops below ~16 fps, which kills the slope
- *   estimate exactly when the pipeline is struggling.
- * - Tracking timeout = 0.8 s.
- *
- * Coordinate system: image-normalized, y increases downward.
- */
+/** One event per motion leg; a real reversal immediately arms the opposite stroke.
+ * Use raw positions for displacement and a noise-derived reversal dead band rather
+ * than a long velocity window that trails continuous up/down strumming. */
 export class StrumDetector {
   private calibration: CalibrationData;
   private readonly options: StrumDetectorOptions;
-  private thresholds: StrumThresholds;
-
-  private readonly ySmoother: ExponentialSmoother;
-  private readonly velocityEstimator: VelocityEstimator;
-
-  private _state: "idle" | "tracking" | "cooldown" = "idle";
-  private armed = true;
-
-  // Tracking accumulators
-  private trackingStartT = 0;
-  private accumulatedDisplacement = 0;
+  private readonly thresholds: StrumThresholds;
+  private previousY: number | null = null;
+  private previousT = -Infinity;
+  private anchorY = 0;
+  private extremeY = 0;
+  private direction = 0;
+  private fired = false;
+  private lastFireT = -Infinity;
+  private lastMovingT = -Infinity;
+  private lastFastT = -Infinity;
   private peakAbsV = 0;
-  private direction: Direction | null = null;
-  private lastTrackedY = 0;
-  private previousRawY: number | null = null;
-
-  // Cooldown
-  private cooldownEndT = 0;
+  private velocity = 0;
+  private displacement = 0;
 
   constructor(calibration: CalibrationData = DEFAULT_CALIBRATION, options?: StrumDetectorOptions) {
     this.calibration = calibration;
     this.options = options ?? {};
-    this.thresholds = { ...DEFAULT_STRUM_THRESHOLDS, ...this.options.thresholds };
-    this.ySmoother = new ExponentialSmoother(0.6);
-    this.velocityEstimator = new VelocityEstimator({ windowSeconds: 0.12, smoothingAlpha: 0.5 });
+    this.thresholds = { ...DEFAULT_STRUM_THRESHOLDS, ...options?.thresholds };
   }
 
-  /** Feed a new palm-center y (null = hand lost). */
   update(y: number | null, t: number): StrumEvent | null {
-    if (y === null) {
-      // No-motion: inject a constant sample so velocity decays toward 0.
-      const lastY = this.ySmoother.value;
-      if (lastY !== null) {
-        this.velocityEstimator.addSample(t, lastY);
-      }
+    if (y === null || !Number.isFinite(y) || !Number.isFinite(t)) {
+      this.clearMotion();
       return null;
     }
-
-    const smoothedY = this.ySmoother.update(y);
-    this.velocityEstimator.addSample(t, smoothedY);
-    const rawV = this.velocityEstimator.velocity;
-
-    // Captured before overwriting: the trigger seed needs the PREVIOUS frame.
-    const prevRawY = this.previousRawY;
-    this.previousRawY = y;
-
-    // Normalize by handScale, then apply sensitivity.
-    const normalizedV = (rawV / this.calibration.handScale) * this.calibration.sensitivity;
-    const absV = Math.abs(normalizedV);
-
-    const topY = this.calibration.strumCorridor.topY;
-    const bottomY = this.calibration.strumCorridor.bottomY;
-    const inCorridor = smoothedY >= topY && smoothedY <= bottomY;
-
-    // Manage cooldown expiration.
-    if (this._state === "cooldown") {
-      if (t >= this.cooldownEndT) {
-        this._state = "idle";
-      } else {
-        return null;
-      }
-    }
-
-    if (this._state === "idle") {
-      if (this.armed && absV >= this.thresholds.minVelocity && inCorridor) {
-        this._state = "tracking";
-        this.trackingStartT = t;
-        this.accumulatedDisplacement = 0;
-        this.peakAbsV = absV;
-        this.direction = normalizedV > 0 ? "down" : "up";
-        // Seed from the previous raw position so the motion that caused the
-        // trigger is counted too — at low frame rates the entire sweep can
-        // sit between the previous sample and this one, and seeding from the
-        // EMA-lagged smoothed y leaves the total just short of the threshold.
-        this.lastTrackedY = prevRawY ?? smoothedY;
-        // Fall through: this frame already contributes displacement.
-      } else {
-        if (absV < this.thresholds.minVelocity * 0.5) {
-          this.armed = true;
-        }
-        return null;
-      }
-    }
-
-    // this._state === "tracking"
-    if (t - this.trackingStartT > 0.8) {
-      this._state = "idle";
-      this.armed = false;
+    if (t <= this.previousT) return null;
+    if (this.previousY === null || t - this.previousT > 0.3) {
+      this.seed(y, t);
       return null;
     }
+    const previousY = this.previousY;
+    const dt = t - this.previousT;
+    this.previousY = y;
+    this.previousT = t;
+    const scale = Math.max(0.01, this.calibration.handScale);
+    const sensitivity = this.calibration.sensitivity;
+    const factor = sensitivity / scale;
+    const noise = Math.max(0, this.calibration.noiseFloor);
+    const reversal = Math.max(0.08 * scale / sensitivity, noise * 2.5);
+    const minimum = Math.max(this.thresholds.minDisplacement * scale / sensitivity, noise * 4);
+    this.velocity = (y - previousY) / dt * factor;
 
-    if (absV > this.peakAbsV) {
-      this.peakAbsV = absV;
+    // Only a sustained rest re-arms the same direction. Merely drifting more
+    // slowly after a stroke must not make a second event from the same sweep.
+    if (Math.abs(this.velocity) >= this.thresholds.minVelocity * 0.5) this.lastMovingT = t;
+    else if (t - this.lastMovingT >= 0.14) {
+      this.anchorY = y;
+      this.extremeY = y;
+      this.direction = 0;
+      this.fired = false;
+      this.peakAbsV = 0;
+      this.displacement = 0;
     }
 
-    // Accumulate displacement in handScale units from the RAW y. Using the
-    // smoothed y here makes the total converge to (full sweep − EMA lag) from
-    // below, so at low frame rates the threshold is approached but never
-    // crossed; signed raw deltas still cancel jitter at high frame rates.
-    const dy = ((y - this.lastTrackedY) / this.calibration.handScale) * this.calibration.sensitivity;
-    this.accumulatedDisplacement += dy;
-    this.lastTrackedY = y;
-
-    const currentDir: Direction | null = normalizedV > 0 ? "down" : normalizedV < 0 ? "up" : this.direction;
-
-    // Direction reversal before minDisplacement → reset to new direction.
-    if (
-      currentDir !== null &&
-      this.direction !== null &&
-      currentDir !== this.direction &&
-      Math.abs(this.accumulatedDisplacement) < this.thresholds.minDisplacement
-    ) {
-      this.direction = currentDir;
-      this.accumulatedDisplacement = 0;
-      this.peakAbsV = absV;
-      this.trackingStartT = t;
-      this.lastTrackedY = smoothedY;
-      return null;
+    if (this.direction === 0) {
+      if (Math.abs(y - this.anchorY) < reversal) return null;
+      this.direction = y > this.anchorY ? 1 : -1;
+      this.extremeY = y;
+      this.fired = false;
+    } else if ((y - this.extremeY) * this.direction < -reversal) {
+      // Reversal starts at the last extremum, including movement between frames.
+      this.anchorY = this.extremeY;
+      this.direction *= -1;
+      this.extremeY = y;
+      this.fired = false;
+      this.peakAbsV = 0;
+      this.lastFastT = -Infinity;
+    } else if ((y - this.extremeY) * this.direction > 0) {
+      this.extremeY = y;
     }
 
-    // Fire when displacement threshold is reached.
-    if (Math.abs(this.accumulatedDisplacement) >= this.thresholds.minDisplacement) {
-      const event: StrumEvent = {
-        type: "strum",
-        t,
-        direction: this.accumulatedDisplacement > 0 ? "down" : "up",
-        velocity: this.peakAbsV,
-        intensity: Math.max(0.15, Math.min(1, this.peakAbsV / this.thresholds.accentVelocity)),
-        articulation: this.options.muted?.() ? "muted" : "normal",
-        source: "vision",
-      };
-      this._state = "cooldown";
-      this.cooldownEndT = t + this.thresholds.cooldownSeconds;
-      this.armed = false;
-      return event;
+    const speed = this.velocity * this.direction;
+    if (speed >= this.thresholds.minVelocity) {
+      this.lastFastT = t;
+      this.peakAbsV = Math.max(this.peakAbsV, speed);
     }
+    this.displacement = (y - this.anchorY) * factor;
+    const corridor = this.calibration.strumCorridor;
+    // Test the entire travelled segment: a quick stroke may skip the region
+    // between two low-FPS frames and must still play.
+    const touchesCorridor = Math.max(this.anchorY, y) >= corridor.topY &&
+      Math.min(this.anchorY, y) <= corridor.bottomY;
+    if (this.fired || !touchesCorridor || t - this.lastFireT < this.thresholds.cooldownSeconds ||
+      t - this.lastFastT > 0.12 || (y - this.anchorY) * this.direction < minimum) return null;
 
-    // Abort on slow drift.
-    if (absV < this.thresholds.minVelocity * 0.3 && Math.abs(this.accumulatedDisplacement) < this.thresholds.minDisplacement) {
-      this._state = "idle";
-      this.armed = false;
-      return null;
-    }
-
-    return null;
+    this.fired = true;
+    this.lastFireT = t;
+    return {
+      type: "strum", t, direction: this.direction > 0 ? "down" : "up",
+      velocity: this.peakAbsV,
+      intensity: Math.max(0.15, Math.min(1, this.peakAbsV / this.thresholds.accentVelocity)),
+      articulation: this.options.muted?.() ? "muted" : "normal", source: "vision",
+    };
   }
 
-  /** Replace calibration live (e.g. after recalibration). */
-  setCalibration(cal: CalibrationData): void {
-    this.calibration = cal;
+  private seed(y: number, t: number): void {
+    this.clearMotion();
+    this.previousY = this.anchorY = this.extremeY = y;
+    this.previousT = this.lastMovingT = t;
   }
 
-  /** Reset all internal state. */
+  private clearMotion(): void {
+    this.previousY = null;
+    this.previousT = -Infinity;
+    this.direction = 0;
+    this.fired = false;
+    this.velocity = this.displacement = this.peakAbsV = 0;
+    this.lastFastT = this.lastMovingT = -Infinity;
+  }
+
+  setCalibration(calibration: CalibrationData): void {
+    this.calibration = calibration;
+    this.reset();
+  }
+
   reset(): void {
-    this.ySmoother.reset();
-    this.velocityEstimator.reset();
-    this._state = "idle";
-    this.armed = true;
-    this.cooldownEndT = 0;
-    this.trackingStartT = 0;
-    this.accumulatedDisplacement = 0;
-    this.peakAbsV = 0;
-    this.direction = null;
-    this.lastTrackedY = 0;
-    this.previousRawY = null;
+    this.clearMotion();
+    this.lastFireT = -Infinity;
   }
 
-  /** Public state — 'cooldown' is folded into 'idle'. */
   get state(): "idle" | "tracking" {
-    return this._state === "tracking" ? "tracking" : "idle";
+    return this.direction !== 0 && !this.fired ? "tracking" : "idle";
+  }
+
+  get debug() {
+    return { velocity: this.velocity, displacement: this.displacement, direction: this.direction,
+      fired: this.fired, minimumDisplacement: Math.max(this.thresholds.minDisplacement,
+        this.calibration.noiseFloor * 4 / this.calibration.handScale * this.calibration.sensitivity) };
   }
 }

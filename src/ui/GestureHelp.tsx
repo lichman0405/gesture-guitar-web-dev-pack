@@ -1,6 +1,5 @@
 import type { PerformanceController } from "../app/performanceController";
-
-const POSES = ["食指", "食指＋中指", "食指＋中指＋无名指", "四指伸直，拇指收起", "五指张开", "竖起拇指"];
+import { SLOT_IDS, DEFAULT_SLOT_GESTURES, GESTURE_LABELS } from "../gesture/gestureTypes";
 
 export function GestureHelp({ controller, handedness }: {
   controller: PerformanceController; handedness: "right" | "left";
@@ -8,9 +7,9 @@ export function GestureHelp({ controller, handedness }: {
   return <details className="keyboard-hints" open>
     <summary>手势怎么弹</summary>
     <p>{handedness === "right" ? "左手选和弦，右手扫弦" : "右手选和弦，左手扫弦"}。手心朝镜头，双手保持在画面里。</p>
-    <table><tbody>{POSES.map((pose, index) => <tr key={pose}>
-      <td>{pose}</td><td>{controller.resolveSlot(`slot-${index + 1}`) ?? "未分配"}</td>
+    <table><tbody>{SLOT_IDS.map((slot) => <tr key={slot}>
+      <td>{GESTURE_LABELS[DEFAULT_SLOT_GESTURES[slot]]}</td><td>{controller.resolveSlot(slot) ?? "未分配"}</td>
     </tr>)}</tbody></table>
-    <p>和弦手保持约 0.2 秒；扫弦手上下穿过绿色区域，握拳可闷音。识别不稳时，改善正面光照并重新校准。</p>
+    <p>和弦手保持约 0.2 秒；其余手指自然收起。扫弦手的拇指和食指可以轻捏，像拿拨片一样；手腕在绿色区域附近连续上下摆动，每次换向都可以出声，无须停顿或大幅挥手。完全握拳可闷音，捏拨片姿势不会闷音。校准时把扫弦手放在准备弹的位置。</p>
   </details>;
 }

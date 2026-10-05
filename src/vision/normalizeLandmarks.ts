@@ -55,7 +55,7 @@ export function handScale(landmarks: Point3[]): number {
  *
  * @throws If the landmark count is not exactly 21.
  */
-export function normalizeHand(hand: TrackedHand, t: number): NormalizedHand {
+export function normalizeHand(hand: TrackedHand, t: number, aspectRatio = 1): NormalizedHand {
   const { landmarks, physical } = hand;
   if (landmarks.length !== HAND_LANDMARK_COUNT) {
     throw new Error(
@@ -65,11 +65,17 @@ export function normalizeHand(hand: TrackedHand, t: number): NormalizedHand {
   const scale = handScale(landmarks);
   const wristRaw = { ...landmarks[LandmarkIndex.WRIST] };
   const palmCenterRaw = palmCenter(landmarks);
-
-  const normalized = landmarks.map((p) => ({
-    x: (p.x - wristRaw.x) / scale,
-    y: (p.y - wristRaw.y) / scale,
-    z: (p.z - wristRaw.z) / scale,
+  // x and z use image-width units; y uses image-height units. Prefer metric
+  // model geometry so tilting the palm does not flatten the finger joints.
+  const world = hand.worldLandmarks;
+  const geometry = world?.length === HAND_LANDMARK_COUNT && world.every(isFinitePoint) && handScale(world) > 1e-5
+    ? world : landmarks.map((p) => ({ x: p.x * aspectRatio, y: p.y, z: p.z * aspectRatio }));
+  const origin = geometry[0];
+  const geometryScale = handScale(geometry);
+  const normalized = geometry.map((p) => ({
+    x: (p.x - origin.x) / geometryScale,
+    y: (p.y - origin.y) / geometryScale,
+    z: (p.z - origin.z) / geometryScale,
   }));
 
   return {
@@ -78,6 +84,11 @@ export function normalizeHand(hand: TrackedHand, t: number): NormalizedHand {
     scale,
     wristRaw,
     palmCenterRaw,
+    strumPointRaw: {
+      x: (landmarks[5].x + landmarks[9].x) / 2,
+      y: (landmarks[5].y + landmarks[9].y) / 2,
+      z: (landmarks[5].z + landmarks[9].z) / 2,
+    },
     t,
   };
 }
@@ -88,6 +99,13 @@ export function normalizeHand(hand: TrackedHand, t: number): NormalizedHand {
 export function normalizeFrameHands(
   hands: TrackedHand[],
   t: number,
+  aspectRatio = 1,
 ): NormalizedHand[] {
-  return hands.map((h) => normalizeHand(h, t));
+  return hands.filter((h) => h.landmarks.length === HAND_LANDMARK_COUNT &&
+    h.landmarks.every(isFinitePoint) && handScale(h.landmarks) > 1e-5)
+    .map((h) => normalizeHand(h, t, aspectRatio));
+}
+
+function isFinitePoint(p: Point3): boolean {
+  return Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
 }

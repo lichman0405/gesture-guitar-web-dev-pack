@@ -19,7 +19,7 @@ function makeHand(
     landmarks: makeLandmarks(),
     scale,
     wristRaw: { x: wristRaw.x + j.x, y: wristRaw.y + j.y, z: wristRaw.z + j.z },
-    palmCenterRaw: { x: wristRaw.x, y: wristRaw.y, z: wristRaw.z },
+    palmCenterRaw: { x: wristRaw.x + j.x, y: wristRaw.y + j.y, z: wristRaw.z + j.z },
     t: 0,
   };
 }
@@ -189,4 +189,33 @@ describe("Calibrator", () => {
     expect(result.chordHandNeutral).toBeNull();
     expect(result.strumCorridor.neutralY).toBeCloseTo(0.55, 2);
   });
+});
+
+describe("motion calibration geometry", () => {
+  it("centers the corridor and noise on the exact point used for strumming", () => {
+    const calibrator = new Calibrator();
+    calibrator.begin(0);
+    for (let i = 0; i < 80; i++) {
+      const chord = makeHand("Left", { x: 0.3, y: 0.7, z: 0 }, 0.3);
+      const perf = makeHand("Right", { x: 0.7, y: 0.7, z: 0 }, 0.12);
+      perf.strumPointRaw = { x: 0.7, y: 0.5 + Math.sin(i * 2) * 0.003, z: 0 };
+      calibrator.addHands([chord, perf], i / 30);
+    }
+    expect(calibrator.result!.handScale).toBeCloseTo(0.12);
+    expect(calibrator.result!.strumCorridor.neutralY).toBeCloseTo(0.5, 2);
+    expect(calibrator.result!.noiseFloor).toBeGreaterThan(0.001);
+    expect(calibrator.result!.motionPoint).toBe("knuckles");
+  });
+});
+
+it("settling outliers do not inflate the calibration noise or shift the strum region", () => {
+  const calibrator = new Calibrator();
+  calibrator.begin(0);
+  for (let i = 0; i < 80; i++) {
+    const perf = makeHand("Right", { x: 0.7, y: 0.7, z: 0 }, 0.15);
+    perf.strumPointRaw = { x: 0.7, y: i < 8 ? 0.8 : 0.5 + Math.sin(i) * 0.002, z: 0 };
+    calibrator.addHands([perf], i / 30);
+  }
+  expect(calibrator.result!.strumCorridor.neutralY).toBeCloseTo(0.5, 2);
+  expect(calibrator.result!.noiseFloor).toBeLessThan(0.005);
 });
