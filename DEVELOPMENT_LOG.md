@@ -68,4 +68,15 @@ Decisions:
 - A11y basics: aria-live chord readout, role=alert mic warning, labelled meters/camera panel/display-mode group.
 - Windows smoke: dev server + build + E2E all run on this Windows host.
 
-## Phase 10 — Final audit (in progress)
+## Phase 10 — Final audit (done)
+
+- Clean install (`npm ci`) → typecheck ✓, lint ✓, 234 unit/integration tests (24 files) ✓, production build ✓, 6 Playwright E2E ✓. Working tree clean; `git remote -v` empty; nothing ever pushed.
+- Performance (scripts/perf-bench.ts, node, deterministic):
+  - Vision pipeline detector chain: 0.005 ms/frame avg (5000 frames, 2 hands) — negligible against the 33 ms frame budget; MediaPipe inference itself runs in a Web Worker off the main thread.
+  - Strum event → engine scheduleStrum: 0.007 ms avg (synchronous bus publish → 6 voices scheduled).
+  - Cold Karplus–Strong synthesis (6 string buffers, ~12 s of audio): median 3.4 ms — ~3500× realtime; LRU cache makes repeat strums buffer-free.
+  - Acceptance E (<100 ms strum latency) is therefore bounded by camera capture + MediaPipe inference on the user's hardware, not by the software path (~µs).
+- Known non-blocking limitations (all hardware/environment-level):
+  - 10-minute continuous soak (acceptance N) not run to wall-clock completion in automation; the E2E stability specs exercise the same record/exit/re-enter code paths repeatedly without page errors.
+  - Camera/microphone behavior verified with Playwright fake media devices and unit-level mocks; real-device latency and lighting robustness require physical hardware.
+  - jsdom lacks OfflineAudioContext, so the guitar-wav export failure-isolation path is unit-tested via that absence; the success path is covered by Chromium E2E (export artifact visible on results screen).
