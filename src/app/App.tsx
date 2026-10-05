@@ -8,8 +8,9 @@ import { LandingScreen } from "../ui/screens/LandingScreen";
 import { SetupScreen } from "../ui/screens/SetupScreen";
 import { CalibrateScreen } from "../ui/screens/CalibrateScreen";
 import { PerformScreen } from "../ui/screens/PerformScreen";
+import { ResultsScreen } from "../ui/screens/ResultsScreen";
 
-type Screen = "landing" | "setup" | "calibrate" | "perform";
+type Screen = "landing" | "setup" | "calibrate" | "perform" | "results";
 
 const settingsStore = new SettingsStore();
 
@@ -23,7 +24,9 @@ export function App() {
 
   const getController = useCallback((): PerformanceController => {
     if (!controllerRef.current) {
-      controllerRef.current = new PerformanceController();
+      controllerRef.current = new PerformanceController({
+        onResultsReady: () => setScreen("results"),
+      });
     }
     return controllerRef.current;
   }, []);
@@ -167,6 +170,14 @@ export function App() {
           visionSession={visionRef.current}
           onRecalibrate={visionRef.current ? recalibrate : undefined}
           onExit={exitSession}
+        />
+      );
+    case "results":
+      return (
+        <ResultsScreen
+          controller={getController()}
+          onReRecord={() => setScreen("perform")}
+          onNewSession={exitSession}
         />
       );
   }

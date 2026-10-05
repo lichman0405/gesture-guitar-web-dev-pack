@@ -26,7 +26,12 @@ export interface ChordProgression {
 export interface GuidedPlan {
   pattern: StrumPattern;
   progression: ChordProgression;
-  /** Loop count is derived from progression length. */
+  /**
+   * Number of bars to materialize. Defaults to progression length. Set
+   * explicitly for pattern-only Guided Rhythm plans (empty progression)
+   * where the loop spans the recording duration.
+   */
+  barCount?: number;
 }
 
 /** Materialized expectation on the session timeline (t in seconds). */

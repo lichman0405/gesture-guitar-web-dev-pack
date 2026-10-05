@@ -16,8 +16,30 @@ import { BeatGrid } from "../music/timing/beatGrid";
 import { Transport } from "../music/timing/transport";
 import { Metronome } from "../music/timing/metronome";
 import { scaleModeMapping, normalizeChordSymbol } from "../music/theory";
+import { MicCapture, requestMicrophone } from "../recording/micCapture";
+import { exportSession } from "../recording/sessionExporter";
+import type { VocalCapture } from "../recording/types";
+import type { GuidedPlan, EvaluationResult } from "../guided/types";
+import { buildExpectedEvents } from "../guided/expectedEvents";
+import { evaluateSession } from "../guided/evaluator";
+import { getPatternForMeter } from "../guided/patterns";
 import type { AppSettings } from "../storage/settingsStore";
 import { AppStore } from "./state/appStore";
+
+export interface GuidedUiState {
+  expectedChord: string | null;
+  nextChord: string | null;
+  nextStrum: { direction: "down" | "up"; beatInBar: number } | null;
+  bar: number;
+  totalBars: number;
+}
+
+export interface ResultsSummary {
+  sessionId: string;
+  artifacts: { kind: string; filename: string }[];
+  failures: { kind: string; message: string }[];
+  evaluation: EvaluationResult | null;
+}
 
 export interface UiState {
   audioReady: boolean;
@@ -30,6 +52,10 @@ export interface UiState {
   metronomeRunning: boolean;
   beatPulse: { bar: number; beatInBar: number; accent: string; inCountIn: boolean; seq: number } | null;
   lastControl: string | null;
+  guided: GuidedUiState | null;
+  micError: string | null;
+  exportState: "idle" | "exporting" | "done" | "failed";
+  results: ResultsSummary | null;
 }
 
 const INITIAL_UI_STATE: UiState = {
@@ -43,6 +69,10 @@ const INITIAL_UI_STATE: UiState = {
   metronomeRunning: false,
   beatPulse: null,
   lastControl: null,
+  guided: null,
+  micError: null,
+  exportState: "idle",
+  results: null,
 };
 
 export interface PerformanceControllerOptions {
@@ -50,6 +80,8 @@ export interface PerformanceControllerOptions {
   createEngine?: (ctx: AudioContext) => GuitarEngine;
   onSessionRecorded?: (session: RecordedSession) => void;
   onBeat?: (info: { bar: number; beatInBar: number; accent: string; audioTime: number }) => void;
+  /** Fired when an export finished and results are ready to display. */
+  onResultsReady?: () => void;
 }
 
 /**
@@ -69,6 +101,13 @@ export class PerformanceController {
   private metronome: Metronome | null = null;
   private unsubscribeBus: (() => void) | null = null;
   private settings: AppSettings | null = null;
+  private grid: BeatGrid | null = null;
+  private recordingGrid: BeatGrid | null = null;
+  private guidedPlan: GuidedPlan | null = null;
+  private micCapture: MicCapture | null = null;
+  private micStream: MediaStream | null = null;
+  private exportUrls = new Map<string, string>();
+  private wasRunningBeforePause = false;
 
   constructor(options: PerformanceControllerOptions = {}) {
     this.options = options;
@@ -106,6 +145,7 @@ export class PerformanceController {
       this.engine.setPreset(settings.instrumentPreset);
       await this.engine.prepare();
     }
+    this.applyGuidedFromSettings(settings);
     this.store.set({ audioReady: true });
   }
 
@@ -132,6 +172,7 @@ export class PerformanceController {
     if (this.engine && prev?.instrumentPreset !== settings.instrumentPreset) {
       this.engine.setPreset(settings.instrumentPreset);
     }
+    this.applyGuidedFromSettings(settings);
     // Restart transport if musical params changed while running.
     if (
       this.transport?.running &&
@@ -143,6 +184,38 @@ export class PerformanceController {
     }
   }
 
+  /** Build/refresh the guided plan from current settings (mode-driven). */
+  private applyGuidedFromSettings(settings: AppSettings): void {
+    if (settings.mode === "guided") {
+      const pattern = getPatternForMeter(settings.guidedPatternId, settings.timeSignature);
+      this.setGuidedPlan(pattern ? { pattern, progression: { bars: [] } } : null);
+    } else if (settings.mode === "song") {
+      const pattern =
+        getPatternForMeter(settings.guidedPatternId, settings.timeSignature) ??
+        getPatternForMeter("down-beats", settings.timeSignature);
+      const bars = settings.songProgression.map((chord) => ({ chord }));
+      this.setGuidedPlan(pattern && bars.length > 0 ? { pattern, progression: { bars } } : null);
+    } else {
+      this.setGuidedPlan(null);
+    }
+  }
+
+  setGuidedPlan(plan: GuidedPlan | null): void {
+    this.guidedPlan = plan;
+    if (!plan) {
+      this.store.set({ guided: null });
+    }
+  }
+
+  get currentGuidedPlan(): GuidedPlan | null {
+    return this.guidedPlan;
+  }
+
+  /** Object URLs of the last export, keyed by artifact kind. */
+  get exportArtifactUrls(): ReadonlyMap<string, string> {
+    return this.exportUrls;
+  }
+
   startMetronome(): void {
     if (!this.graph || !this.settings || this.transport?.running) return;
     const grid = new BeatGrid(
@@ -150,6 +223,7 @@ export class PerformanceController {
       this.settings.timeSignature,
       this.settings.countInBars,
     );
+    this.grid = grid;
     this.transport = new Transport(this.graph.ctx, grid);
     this.metronome = new Metronome(this.graph.ctx, this.graph.master, {
       audible: this.settings.metronomeOn,
@@ -165,10 +239,39 @@ export class PerformanceController {
           seq: info.beatIndex,
         },
       });
+      this.updateGuidedState(info);
       this.options.onBeat?.(info);
     });
     this.transport.start();
     this.store.set({ metronomeRunning: true });
+  }
+
+  /** Recompute the guided/song display state at each beat boundary. */
+  private updateGuidedState(info: { bar: number; beatInBar: number }): void {
+    const plan = this.guidedPlan;
+    if (!plan) return;
+    const progLen = plan.progression.bars.length;
+    const totalBars = plan.barCount ?? progLen;
+    const bar = Math.max(0, info.bar);
+    let expectedChord: string | null = null;
+    let nextChord: string | null = null;
+    if (progLen > 0) {
+      expectedChord = plan.progression.bars[bar % progLen]?.chord ?? null;
+      nextChord = plan.progression.bars[(bar + 1) % progLen]?.chord ?? null;
+    }
+    const steps = plan.pattern.steps;
+    const nextStep = steps.find((s) => s.beatOffset > info.beatInBar + 1e-3) ?? steps[0] ?? null;
+    this.store.set({
+      guided: {
+        expectedChord,
+        nextChord,
+        nextStrum: nextStep
+          ? { direction: nextStep.direction, beatInBar: nextStep.beatOffset }
+          : null,
+        bar,
+        totalBars,
+      },
+    });
   }
 
   stopMetronome(): void {
@@ -207,14 +310,147 @@ export class PerformanceController {
             chordMappingMode: "scale",
           });
     this.recorder.start(sessionSettings);
-    this.store.set({ recording: true, recordStartWallTime: Date.now() });
+    this.store.set({
+      recording: true,
+      recordStartWallTime: Date.now(),
+      micError: null,
+      exportState: "idle",
+      results: null,
+    });
+
+    // Guided/song recordings align to the transport (count-in included).
+    if (this.guidedPlan && !this.transport?.running) {
+      this.startMetronome();
+    }
+    this.recordingGrid = this.transport?.grid ?? this.grid;
+
+    // Vocal capture is best-effort: mic denial never blocks guitar (§L).
+    void this.startMicCapture();
+  }
+
+  private async startMicCapture(): Promise<void> {
+    if (!this.graph) return;
+    const { stream, error } = await requestMicrophone();
+    if (!stream) {
+      if (this.recorder.isRecording) {
+        this.store.set({ micError: error ?? "Microphone unavailable" });
+      }
+      return;
+    }
+    try {
+      const capture = new MicCapture();
+      await capture.start(this.graph.ctx, stream);
+      this.micCapture = capture;
+      this.micStream = stream;
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop());
+      if (this.recorder.isRecording) {
+        this.store.set({
+          micError: err instanceof Error ? err.message : "Microphone capture failed",
+        });
+      }
+    }
+  }
+
+  private stopMicCapture(): VocalCapture | null {
+    const capture = this.micCapture;
+    this.micCapture = null;
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((t) => t.stop());
+      this.micStream = null;
+    }
+    if (!capture || !capture.isCapturing) return null;
+    return capture.stop();
   }
 
   stopRecording(): RecordedSession | null {
     const session = this.recorder.stop();
+    const vocal = this.stopMicCapture();
     this.store.set({ recording: false, recordStartWallTime: null });
-    if (session) this.options.onSessionRecorded?.(session);
+    if (session) {
+      const evaluation = this.evaluateIfGuided(session);
+      this.options.onSessionRecorded?.(session);
+      void this.runExport(session, vocal, evaluation);
+    }
     return session;
+  }
+
+  /** Attach songPlan + evaluation to the session when a guided plan is active. */
+  private evaluateIfGuided(session: RecordedSession): EvaluationResult | null {
+    const plan = this.guidedPlan;
+    const grid = this.recordingGrid;
+    if (!plan || !grid) return null;
+    const lastT = session.events.length > 0 ? session.events[session.events.length - 1].t : 0;
+    const barDuration = grid.beatDuration * grid.beatsPerBar;
+    const barCount =
+      plan.progression.bars.length > 0
+        ? plan.progression.bars.length
+        : Math.max(1, Math.ceil(lastT / barDuration));
+    const expected = buildExpectedEvents({ ...plan, barCount }, grid);
+    const evaluation = evaluateSession(expected, session.events);
+    session.evaluation = evaluation as unknown as object;
+    session.songPlan = {
+      mode: this.settings?.mode ?? "free",
+      pattern: plan.pattern.id,
+      progression: plan.progression,
+    };
+    return evaluation;
+  }
+
+  private async runExport(
+    session: RecordedSession,
+    vocal: VocalCapture | null,
+    evaluation: EvaluationResult | null,
+  ): Promise<void> {
+    this.store.set({ exportState: "exporting" });
+    this.revokeExportUrls();
+    try {
+      const result = await exportSession(session, { vocal: vocal ?? undefined });
+      if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") {
+        for (const artifact of result.artifacts) {
+          this.exportUrls.set(artifact.kind, URL.createObjectURL(artifact.blob));
+        }
+      }
+      this.store.set({
+        exportState: "done",
+        results: {
+          sessionId: session.sessionId,
+          artifacts: result.artifacts.map((a) => ({ kind: a.kind, filename: a.filename })),
+          failures: result.failures.map((f) => ({ kind: f.kind, message: f.message })),
+          evaluation,
+        },
+      });
+      this.options.onResultsReady?.();
+    } catch (err) {
+      // exportSession isolates per-track failures; this is the catastrophic path.
+      this.store.set({
+        exportState: "failed",
+        results: {
+          sessionId: session.sessionId,
+          artifacts: [],
+          failures: [
+            {
+              kind: "mix-wav",
+              message: err instanceof Error ? err.message : "Export failed unexpectedly",
+            },
+          ],
+          evaluation,
+        },
+      });
+    }
+  }
+
+  private revokeExportUrls(): void {
+    if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+      for (const url of this.exportUrls.values()) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // already revoked
+        }
+      }
+    }
+    this.exportUrls.clear();
   }
 
   private handleEvent(event: PerformanceEvent): void {
@@ -270,11 +506,18 @@ export class PerformanceController {
         }
         break;
       case "pause":
+        this.wasRunningBeforePause = this.transport?.running ?? false;
         this.transport?.stop();
         this.store.set({ metronomeRunning: false });
         break;
       case "resume":
+        if (this.wasRunningBeforePause) {
+          this.startMetronome();
+        }
+        break;
       case "ready":
+        // Two thumbs up: count me in.
+        this.startMetronome();
         break;
       case "recalibrate":
         break;
@@ -283,6 +526,8 @@ export class PerformanceController {
 
   dispose(): void {
     this.stopMetronome();
+    this.stopMicCapture();
+    this.revokeExportUrls();
     this.engine?.stopAll();
     this.unsubscribeBus?.();
     this.unsubscribeBus = null;

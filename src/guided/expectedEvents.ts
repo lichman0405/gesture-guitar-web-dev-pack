@@ -9,17 +9,22 @@ export function buildExpectedEvents(
   const beatsPerBar = grid.beatsPerBar;
   const beatDuration = grid.beatDuration;
   const countInBeats = grid.countInBeats;
+  const barCount = plan.barCount ?? plan.progression.bars.length;
 
-  for (let b = 0; b < plan.progression.bars.length; b++) {
+  for (let b = 0; b < barCount; b++) {
     const barFirstBeatAbsolute = countInBeats + b * beatsPerBar;
     const barStart = grid.beatTime(barFirstBeatAbsolute);
 
-    events.push({
-      kind: "chord",
-      t: barStart,
-      chord: plan.progression.bars[b].chord,
-      bar: b,
-    });
+    // Chord expectations only where the progression defines one
+    // (pattern-only Guided Rhythm plans have an empty progression).
+    if (b < plan.progression.bars.length) {
+      events.push({
+        kind: "chord",
+        t: barStart,
+        chord: plan.progression.bars[b].chord,
+        bar: b,
+      });
+    }
 
     for (const step of plan.pattern.steps) {
       if (step.beatOffset >= beatsPerBar) continue;

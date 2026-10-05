@@ -131,4 +131,65 @@ describe("PerformanceController keyboard path (acceptance B)", () => {
     expect(controller.resolveSlot("slot-2")).toBe("Em");
     controller.dispose();
   });
+
+  it("song mode builds a guided plan and evaluates the recording (acceptance I/J)", async () => {
+    const { controller } = makeController();
+    await controller.startAudio({
+      ...DEFAULT_SETTINGS,
+      mode: "song",
+      songProgression: ["C", "G"],
+      guidedPatternId: "down-beats",
+    });
+    expect(controller.currentGuidedPlan?.progression.bars).toHaveLength(2);
+
+    // Guided recordings auto-start the transport for count-in alignment.
+    controller.startRecording();
+    expect(controller.store.getSnapshot().metronomeRunning).toBe(true);
+
+    const now = controller.bus.now();
+    controller.bus.publish({
+      type: "chord", t: now, slot: "slot-1", chord: "C", confidence: 1, source: "keyboard",
+    });
+    controller.bus.publish({
+      type: "strum", t: now, direction: "down", velocity: 2, intensity: 0.5,
+      articulation: "normal", source: "keyboard",
+    });
+    const session = controller.stopRecording();
+
+    expect(session).not.toBeNull();
+    expect(session!.songPlan).toMatchObject({ pattern: "down-beats", mode: "song" });
+    const evaluation = session!.evaluation as unknown as {
+      strumExpected: number;
+      chordExpected: number;
+      missedStrums: number;
+    };
+    expect(evaluation.chordExpected).toBe(2);
+    expect(evaluation.strumExpected).toBe(8); // 2 bars × 4 down-beats
+    controller.dispose();
+  });
+
+  it("stopRecording yields a results summary; export failures stay isolated", async () => {
+    const { controller } = makeController();
+    await controller.startAudio({ ...DEFAULT_SETTINGS });
+    controller.startRecording();
+    controller.bus.publish({
+      type: "strum", t: controller.bus.now(), direction: "down", velocity: 2, intensity: 0.5,
+      articulation: "normal", source: "keyboard",
+    });
+    controller.stopRecording();
+
+    const deadline = Date.now() + 3000;
+    while (
+      controller.store.getSnapshot().exportState === "exporting" &&
+      Date.now() < deadline
+    ) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const snap = controller.store.getSnapshot();
+    expect(snap.exportState).toBe("done");
+    expect(snap.results?.artifacts.map((a) => a.kind)).toContain("performance-json");
+    // jsdom has no OfflineAudioContext → guitar-wav failure isolated, not fatal.
+    expect(snap.results?.failures.map((f) => f.kind)).toContain("guitar-wav");
+    controller.dispose();
+  });
 });

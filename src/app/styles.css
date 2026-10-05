@@ -382,3 +382,108 @@ button.link {
   text-decoration: underline;
   padding: 0.25rem 0;
 }
+
+/* Guided / song display */
+.guided-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.9rem 1.4rem;
+}
+
+.guided-chords {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 1.15rem;
+}
+
+.guided-chords strong {
+  color: var(--accent);
+  font-size: 1.5rem;
+}
+
+.guided-next {
+  color: #9fb0c0;
+}
+
+.guided-next-strum {
+  font-size: 1.05rem;
+}
+
+.guided-bar {
+  color: #7d8fa1;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mic-warning {
+  color: var(--accent-strong);
+  max-width: 32rem;
+  text-align: center;
+}
+
+.exporting-note {
+  color: #9fb0c0;
+}
+
+.field-warning {
+  color: var(--accent-strong);
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0;
+}
+
+.field input[type="text"] {
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: inherit;
+}
+
+/* Results screen */
+.results-screen {
+  max-width: 720px;
+}
+
+.results-screen section {
+  margin: 1.5rem 0;
+}
+
+.results-screen h3 {
+  margin-bottom: 0.6rem;
+}
+
+.results-metrics dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1.5rem;
+  max-width: 30rem;
+}
+
+.results-metrics dt {
+  color: #9fb0c0;
+}
+
+.results-metrics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-failures {
+  margin-top: 1rem;
+  color: var(--accent-strong);
+}
+
+.export-failures ul {
+  margin: 0.4rem 0;
+}
+
+.results-playback audio {
+  width: 100%;
+  max-width: 30rem;
+}

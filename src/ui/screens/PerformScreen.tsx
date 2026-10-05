@@ -134,6 +134,40 @@ export function PerformScreen({ controller, visionSession, onRecalibrate, onExit
             <div className="beat-dot off">·</div>
           )}
         </section>
+
+        {ui.guided && (
+          <section className="guided-display" data-testid="guided-display">
+            {ui.guided.expectedChord && (
+              <div className="guided-chords">
+                <span>
+                  Expected: <strong data-testid="expected-chord">{ui.guided.expectedChord}</strong>
+                </span>
+                <span className="guided-next">Next: {ui.guided.nextChord}</span>
+              </div>
+            )}
+            {ui.guided.nextStrum && (
+              <div className="guided-next-strum" data-testid="next-strum">
+                Next strum:{" "}
+                <span className={`strum-arrow ${ui.guided.nextStrum.direction}`}>
+                  {ui.guided.nextStrum.direction === "down" ? "▼" : "▲"}
+                </span>
+              </div>
+            )}
+            <div className="guided-bar">
+              Bar {ui.guided.bar + 1}
+              {ui.guided.totalBars > 0 ? ` / ${ui.guided.totalBars}` : ""}
+            </div>
+          </section>
+        )}
+
+        {ui.micError && (
+          <p className="mic-warning" role="alert">
+            Microphone unavailable ({ui.micError}) — guitar performance still records.
+          </p>
+        )}
+        {ui.exportState === "exporting" && (
+          <p className="exporting-note">Rendering export locally…</p>
+        )}
       </div>
 
       <div className="perform-side">

@@ -1,5 +1,6 @@
 import { MAJOR_KEYS, CHORD_VOCABULARY } from "../../music/theory";
 import { INSTRUMENT_PRESETS } from "../../music/engine/InstrumentPreset";
+import { STRUM_PATTERNS } from "../../guided/patterns";
 import type { AppSettings } from "../../storage/settingsStore";
 import type { Handedness, PlayMode, TimeSignature } from "../../performance/eventTypes";
 
@@ -49,6 +50,51 @@ export function SetupScreen({ settings, onChange, onContinue, onBack }: Props) {
           ))}
         </select>
       </section>
+
+      {(settings.mode === "guided" || settings.mode === "song") && (
+        <section className="field">
+          <label htmlFor="pattern">Strumming pattern</label>
+          <select
+            id="pattern"
+            value={settings.guidedPatternId}
+            onChange={(e) => onChange({ guidedPatternId: e.target.value })}
+          >
+            {STRUM_PATTERNS.filter((p) => p.timeSignatures.includes(settings.timeSignature)).map(
+              (p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ),
+            )}
+          </select>
+        </section>
+      )}
+
+      {settings.mode === "song" && (
+        <section className="field">
+          <label htmlFor="progression">Chord progression (one chord per bar)</label>
+          <input
+            id="progression"
+            type="text"
+            value={settings.songProgression.join(" ")}
+            onChange={(e) =>
+              onChange({
+                songProgression: e.target.value
+                  .split(/[\s,]+/)
+                  .map((c) => c.trim())
+                  .filter((c) => c.length > 0),
+              })
+            }
+            placeholder="e.g. C G Am F"
+          />
+          {settings.songProgression.some((c) => !CHORD_VOCABULARY.includes(c)) && (
+            <p className="field-warning" role="alert">
+              Some chords are outside the 24-chord vocabulary and cannot be triggered by
+              gestures.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="field">
         <label htmlFor="chord-mapping">Chord mapping</label>
